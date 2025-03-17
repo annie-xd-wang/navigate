@@ -12,6 +12,7 @@ from ctypes import (
     windll,
     Structure,
     c_int32,
+    c_uint32,
     c_void_p,
     sizeof,
     addressof,
@@ -635,6 +636,57 @@ class DCAMDEV_STRING(Structure):
         ("textbytes", c_int32),
     ]
 
+class DCAM_PIXELTYPE(IntEnum):
+    NONE = 0  # no pixeltype specified
+    MONO8 = 1  # B/W 8 bit
+    MONO16 = 2  # B/W 16 bit
+
+class DCAM_TIMESTAMP(Structure):
+    _pack_ = 8
+    _fields_ = [
+        ('sec', c_uint32),
+        ('microsec', c_int32)
+    ]
+
+    def __init__(self):
+        self.sec = 0
+        self.microsec = 0
+
+class DCAMBUF_FRAME(Structure):
+    _pack_ = 8
+    _fields_ = [
+        ('size', c_int32),
+        ('iKind', c_int32),
+        ('option', c_int32),
+        ('iFrame', c_int32),
+        ('buf', c_void_p),
+        ('rowbytes', c_int32),
+        ('type', c_int32),  # DCAM_PIXELTYPE
+        ('width', c_int32),
+        ('height', c_int32),
+        ('left', c_int32),
+        ('top', c_int32),
+        ('timestamp', DCAM_TIMESTAMP),
+        ('framestamp', c_int32),
+        ('camerastamp', c_int32)
+    ]
+
+    def __init__(self):
+        self.size = sizeof(DCAMBUF_FRAME)
+        self.iKind = 0
+        self.option = 0
+        self.iFrame = 0
+        self.buf = 0
+        self.rowbytes = 0
+        self.type = DCAM_PIXELTYPE.MONO16
+        self.width = 0
+        self.height = 0
+        self.left = 0
+        self.top = 0
+        self.timestamp = DCAM_TIMESTAMP()
+        self.framestamp = 0
+        self.camerastamp = 0
+
 
 property_dict = {
     "exposure_time": 2031888,  # 0x001F0110, R/W, sec, "EXPOSURE TIME"
@@ -686,6 +738,8 @@ dcamprop_getvalue = __dll.dcamprop_getvalue
 dcamprop_setvalue = __dll.dcamprop_setvalue
 dcamprop_setgetvalue = __dll.dcamprop_setgetvalue
 dcambuf_attach = __dll.dcambuf_attach
+dcambuf_alloc = __dll.dcambuf_alloc
+dcambuf_copyframe = __dll.dcambuf_copyframe
 dcambuf_release = __dll.dcambuf_release
 dcamcap_start = __dll.dcamcap_start
 dcamcap_stop = __dll.dcamcap_stop
@@ -1143,6 +1197,14 @@ class DCAM:
             self.pre_frame_count = 0
             self.pre_index = 0
             return self.__result(dcamcap_start(self.__hdcam, DCAMCAP_START_SEQUENCE))
+        
+
+        # allocate buffer
+        # if self.__result(dcambuf_alloc(self.__hdcam, c_int32(number_of_frames))):
+        #     self.pre_frame_count = 0
+        #     self.pre_index = 0
+        #     return self.__result(dcamcap_start(self.__hdcam, DCAMCAP_START_SEQUENCE))
+
         return False
 
     def stop_acquisition(self):
@@ -1222,6 +1284,21 @@ class DCAM:
                         self.number_of_frames,
                     )
                 ) + list(range(0, cap_info.nNewestFrameIndex + 1))
+
+
+            # copy frames
+            # for i in frame_idx_list:
+            #     aFrame = DCAMBUF_FRAME()
+            #     aFrame.iFrame = 1
+            #     aFrame.rowbytes = self.data_buffer[i].shape[1] * 2
+            #     aFrame.buf = self.data_buffer[i].ctypes.data
+            #     aFrame.type = 0
+            #     aFrame.width = self.data_buffer[i].shape[1]
+            #     aFrame.height = self.data_buffer[i].shape[0]
+            #     aFrame.left = 0
+            #     aFrame.top = 0
+
+            #     self.__result(dcambuf_copyframe(self.__hdcam, byref(aFrame)))
 
             # check if backlog happens
             # if (self.pre_index+1) % self.number_of_frames != frame_idx_list[0]:
