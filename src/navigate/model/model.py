@@ -698,16 +698,26 @@ class Model:
             Args[1]: device reference
             """
             if self.is_acquiring and self.imaging_mode == "live":
-                with self.injected_flag as injected_flag:
-                    if hasattr(self, "signal_container"):
-                        self.signal_container.cleanup()
-                    if hasattr(self, "data_container"):
-                        self.data_container.cleanup()
-                    self.signal_container, self.data_container = load_features(
-                        self,
-                        [{"name": Autofocus}],
-                    )
-                    injected_flag.value = True
+                # stop current live signals
+                self.stop_send_signal = True
+                self.signal_thread.join()
+                # load Autofocus
+                self.signal_container, self.data_container = load_features(
+                    self,
+                    [{"name": Autofocus}],
+                )
+                self.signal_thread = threading.Thread(
+                    target=self.run_acquisition
+                )
+                self.stop_send_signal = False
+                self.signal_thread.start()
+                self.signal_thread.join()
+                # run live signals
+                self.signal_thread = threading.Thread(
+                    target=self.run_live_acquisition,
+                    name="Live Signal Thread",
+                )
+                self.signal_thread.start()
 
             elif not self.is_acquiring:
                 self.is_acquiring = True
@@ -1202,15 +1212,13 @@ class Model:
         """
         self.stop_acquisition = False
         while not self.stop_acquisition and not self.stop_send_signal:
-            self.run_acquisition()
-            if self.injected_flag.value:
-                self.reset_feature_list()
-            elif hasattr(self, "signal_container"):
-                self.signal_container.reset()
-
-        # Update the stage position.
-        # Allows the user to externally move the stage in the continuous mode.
-        self.get_stage_position()
+            for _ in self.active_microscope.available_channels:
+                if self.stop_acquisition or self.stop_send_signal:
+                    break
+                self.active_microscope.prepare_next_channel()
+                if self.stop_acquisition or self.stop_send_signal:
+                    break
+                self.snap_image()
 
     def run_acquisition(self) -> None:
         """Run acquisition along with a feature list one time.
