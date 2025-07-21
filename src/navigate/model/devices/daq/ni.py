@@ -327,6 +327,8 @@ class NIDAQ(DAQBase):
 
     def create_master_trigger_task(self) -> None:
         """Set up the DO master trigger task."""
+        if self.master_trigger_task:
+            return
         self.master_trigger_task = nidaqmx.Task()
         master_trigger_out_line = self.configuration["configuration"]["microscopes"][
             self.microscope_name
@@ -460,9 +462,15 @@ class NIDAQ(DAQBase):
             self.master_trigger_task.write(
                 [False, True, True, True, False], auto_start=True
             )
-
         try:
             self.camera_trigger_task.wait_until_done(timeout=10000)
+            if self.trigger_mode == "self-trigger":
+                self.master_trigger_task.stop()
+            self.camera_trigger_task.stop()
+        except nidaqmx.DaqError:
+            pass
+
+        try:
             for task in self.analog_output_tasks.values():
                 if self.trigger_mode == "self-trigger":
                     task.wait_until_done()
@@ -471,12 +479,6 @@ class NIDAQ(DAQBase):
             # when triggered from external triggers, sometimes the camera trigger task
             # is done but not actually done, there will a DAQ WARNING message
             logger.debug(f"Wait until tasks done failed - {traceback.format_exc()}")
-            pass
-        try:
-            self.camera_trigger_task.stop()
-            if self.trigger_mode == "self-trigger":
-                self.master_trigger_task.stop()
-        except nidaqmx.DaqError:
             pass
 
     def stop_acquisition(self) -> None:
@@ -490,7 +492,6 @@ class NIDAQ(DAQBase):
 
             if self.trigger_mode == "self-trigger":
                 self.master_trigger_task.stop()
-                self.master_trigger_task.close()
 
             for k, task in self.analog_output_tasks.items():
                 task.stop()
