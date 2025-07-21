@@ -292,6 +292,7 @@ class NIDAQ(DAQBase):
         channel_key : str
             Channel key for current channel.
         """
+        logger.debug("*** DAQ create new camera task!!!")
         self.camera_trigger_task = nidaqmx.Task()
         camera_trigger_out_line = self.configuration["configuration"]["microscopes"][
             self.microscope_name
@@ -311,6 +312,8 @@ class NIDAQ(DAQBase):
             camera_high_time = self.sweep_times[channel_key] - 0.004
             camera_low_time = 0.004
 
+        logger.debug(f"camera high time and low time: {camera_high_time}, {camera_low_time}")
+
         self.camera_trigger_task.co_channels.add_co_pulse_chan_time(
             camera_trigger_out_line,
             high_time=camera_high_time,
@@ -327,6 +330,8 @@ class NIDAQ(DAQBase):
 
     def create_master_trigger_task(self) -> None:
         """Set up the DO master trigger task."""
+        if self.master_trigger_task:
+            return
         self.master_trigger_task = nidaqmx.Task()
         master_trigger_out_line = self.configuration["configuration"]["microscopes"][
             self.microscope_name
@@ -335,6 +340,7 @@ class NIDAQ(DAQBase):
             master_trigger_out_line,
             line_grouping=nidaqmx.constants.LineGrouping.CHAN_FOR_ALL_LINES,
         )
+        logger.debug("*** DAQ create master trigger task!!!")
 
     def create_analog_output_tasks(self, channel_key: str) -> None:
         """Create analog output tasks for each board.
@@ -452,6 +458,7 @@ class NIDAQ(DAQBase):
             self.wait_to_run_lock.release()
 
         if self.camera_trigger_task.is_task_done():
+            logger.debug("*** DAQ: start camera task!")
             self.camera_trigger_task.start()
             for task in self.analog_output_tasks.values():
                 task.start()
@@ -460,9 +467,20 @@ class NIDAQ(DAQBase):
             self.master_trigger_task.write(
                 [False, True, True, True, False], auto_start=True
             )
+            logger.debug("*** DAQ: start master task!")
 
         try:
             self.camera_trigger_task.wait_until_done(timeout=10000)
+            logger.debug("*** DAQ Camera task is Done!")
+            if self.trigger_mode == "self-trigger":
+                self.master_trigger_task.stop()
+                logger.debug("*** DAQ stop master trigger!!! before stop camera "
+                                "trigger!!!")
+            self.camera_trigger_task.stop()
+        except nidaqmx.DaqError:
+            pass
+
+        try:
             for task in self.analog_output_tasks.values():
                 if self.trigger_mode == "self-trigger":
                     task.wait_until_done()
@@ -472,12 +490,12 @@ class NIDAQ(DAQBase):
             # is done but not actually done, there will a DAQ WARNING message
             logger.debug(f"Wait until tasks done failed - {traceback.format_exc()}")
             pass
-        try:
-            self.camera_trigger_task.stop()
-            if self.trigger_mode == "self-trigger":
-                self.master_trigger_task.stop()
-        except nidaqmx.DaqError:
-            pass
+        # try:
+        #     self.camera_trigger_task.stop()
+        #     if self.trigger_mode == "self-trigger":
+        #         self.master_trigger_task.stop()
+        # except nidaqmx.DaqError:
+        #     pass
 
     def stop_acquisition(self) -> None:
         """Stop Acquisition.
@@ -485,15 +503,21 @@ class NIDAQ(DAQBase):
         Stop all tasks and close them.
         """
         try:
+            logger.debug(f"*** DAQ stop camera trigger!!!")
             self.camera_trigger_task.stop()
+            logger.debug(f"*** DAQ close camera trigger!!!!")
             self.camera_trigger_task.close()
 
             if self.trigger_mode == "self-trigger":
+                logger.debug(f"*** DAQ stop master trigger!!!!")
                 self.master_trigger_task.stop()
-                self.master_trigger_task.close()
+                logger.debug(f"*** DAQ close master trigger!!!!")
+                # self.master_trigger_task.close()
 
             for k, task in self.analog_output_tasks.items():
+                logger.debug(f"*** DAQ stop AO tasks!!!")
                 task.stop()
+                logger.debug(f"*** DAQ close AO tasks!!!!")
                 task.close()
 
         except (AttributeError, nidaqmx.errors.DaqError):
