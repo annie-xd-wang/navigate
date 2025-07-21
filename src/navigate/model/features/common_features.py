@@ -1774,3 +1774,31 @@ class FindTissueSimple2D:
             )
 
             self.model.event_queue.put(("multiposition", table_values))
+class TestExtratrigger:
+    def __init__(self, model, count=3):
+        self.model = model
+        self.prepare_next_channel = PrepareNextChannel(model)
+        self.count = 0
+        self.count_limits = count
+
+        self.config_table = {
+            "signal": {
+                "init": self.pre_signal,
+                "main": self.signal_func,
+                "end": self.signal_end,
+            },
+            "node": {"node_type": "multi-step", "device_related": True},
+        }
+
+    def pre_signal(self, *args):
+        self.model.active_microscope.current_channel = 0
+        self.prepare_next_channel.signal_func()
+        self.count = 0
+
+    def signal_func(self, *args):
+        self.count += 1
+        return True
+
+    def signal_end(self, *args):
+        self.prepare_next_channel.signal_func()
+        return self.count >= self.count_limits

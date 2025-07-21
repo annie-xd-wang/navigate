@@ -87,6 +87,7 @@ class AcquireBarController(GUIController):
             "Z-Stack": "z-stack",
             "Single Acquisition": "single",
             "Customized": "customized",
+            "Test": "test",
         }
 
         self.view.pull_down["values"] = list(self.mode_dict.keys())

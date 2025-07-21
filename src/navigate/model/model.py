@@ -50,6 +50,7 @@ from navigate.model.features.auto_tile_scan import CalculateFocusRange  # noqa
 from navigate.model.features.common_features import (
     Snap,  # noqa
     ZStackAcquisition,
+    TestExtratrigger,
     FindTissueSimple2D,
     PrepareNextChannel,
     LoopByCount,
@@ -380,6 +381,15 @@ class Model:
                 )
             ],
             "customized": [],
+            "test": [
+                (
+                    {"name": TestExtratrigger},
+                    {
+                        "name": LoopByCount,
+                        "args": ("experiment.MicroscopeState.timepoints",),
+                    },
+                )
+            ]
         }
         # append plugin acquisition mode
         for mode in self.plugin_acquisition_modes:
@@ -1164,9 +1174,12 @@ class Model:
         # Run the acquisition
         try:
             self.active_microscope.turn_on_laser()
+            self.logger.debug(f"*** DAQ send out trigger for the frame {self.frame_id}")
             self.active_microscope.daq.run_acquisition()
-        except:  # noqa
+        except Exception as e:  # noqa
             self.active_microscope.daq.stop_acquisition()
+            self.logger.debug(f"*** DAQ try to send out trigger for the frame "
+                              f"{self.frame_id} again!!! The error is {e}")
             if self.active_microscope.current_channel == 0:
                 self.stop_acquisition = True
                 self.event_queue.put(
