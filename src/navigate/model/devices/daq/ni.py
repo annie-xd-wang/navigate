@@ -327,8 +327,6 @@ class NIDAQ(DAQBase):
 
     def create_master_trigger_task(self) -> None:
         """Set up the DO master trigger task."""
-        if self.master_trigger_task:
-            return
         self.master_trigger_task = nidaqmx.Task()
         master_trigger_out_line = self.configuration["configuration"]["microscopes"][
             self.microscope_name
@@ -492,6 +490,7 @@ class NIDAQ(DAQBase):
 
             if self.trigger_mode == "self-trigger":
                 self.master_trigger_task.stop()
+                self.master_trigger_task.close()
 
             for k, task in self.analog_output_tasks.items():
                 task.stop()
