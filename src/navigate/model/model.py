@@ -1215,6 +1215,8 @@ class Model:
             for _ in self.active_microscope.available_channels:
                 if self.stop_acquisition or self.stop_send_signal:
                     break
+                for m in self.virtual_microscopes:
+                    self.virtual_microscopes[m].prepare_next_channel()
                 self.active_microscope.prepare_next_channel()
                 if self.stop_acquisition or self.stop_send_signal:
                     break
