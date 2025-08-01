@@ -360,9 +360,12 @@ def start_device(
     else:
         class_name_suffix = device_category.capitalize()
 
-    device_types_dict = load_param_from_module(
-        "navigate.config.configuration_database", device_category + "_device_types"
-    )
+    try:
+        device_types_dict = load_param_from_module(
+            "navigate.config.configuration_database", device_category + "_device_types"
+        )
+    except AttributeError:
+        device_types_dict = {}
 
     for k in device_types_dict:
         if type(device_types_dict[k]) is not tuple:

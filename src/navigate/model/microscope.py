@@ -41,7 +41,7 @@ import numpy as np
 
 # Local application imports
 from navigate.model.device_startup_functions import load_devices, start_device
-from navigate.tools.common_functions import build_ref_name
+from navigate.tools.common_functions import build_ref_name, is_subpackage
 
 # Set up logging
 p = __name__.split(".")[1]
@@ -218,6 +218,8 @@ class Microscope:
                         device_name
                     ]["ref_list"]
                     is_plugin = True
+                elif is_subpackage("navigate.model.devices", device_name):
+                    device_ref_dict[device_name] = ["type", "id"]
                 else:
                     print(
                         f"Device {device_name} could not be loaded! "

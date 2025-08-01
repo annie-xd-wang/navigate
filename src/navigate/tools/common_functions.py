@@ -152,6 +152,27 @@ def load_param_from_module(module_name: str, param_name: str) -> Optional[any]:
         return None
     return param
 
+def is_subpackage(module_name: str, subpackage_name: str) -> bool:
+    """Check if a module is a subpackage of another module.
+
+    Parameters
+    ----------
+    module_name: str
+        The name of the module to check.
+    subpackage_name: str
+        The name of the subpackage to check against.
+
+    Returns
+    -------
+    bool
+        True if the module is a subpackage, False otherwise.
+    """
+    try:
+        pkg = importlib.import_module(module_name)
+        return hasattr(pkg, '__path__') and subpackage_name in pkg.__path__
+    except ModuleNotFoundError:
+        return False
+
 
 class VariableWithLock:
     def __init__(self, VariableType):
