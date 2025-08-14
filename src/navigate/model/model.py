@@ -1218,8 +1218,8 @@ class Model:
                 if self.stop_acquisition or self.stop_send_signal:
                     break
                 for m in self.virtual_microscopes:
-                    self.virtual_microscopes[m].prepare_next_channel()
-                self.active_microscope.prepare_next_channel()
+                    self.virtual_microscopes[m].prepare_next_channel(False)
+                self.active_microscope.prepare_next_channel(False)
                 if self.stop_acquisition or self.stop_send_signal:
                     break
                 self.snap_image()
