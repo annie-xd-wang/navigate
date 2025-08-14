@@ -587,6 +587,8 @@ class Model:
                 self.data_buffer_saving_flags = None
 
             if self.imaging_mode == "live":
+                delattr(self, "signal_container")
+                delattr(self, "data_container")
                 self.signal_thread = threading.Thread(target=self.run_live_acquisition)
             else:
                 self.signal_thread = threading.Thread(target=self.run_acquisition)
