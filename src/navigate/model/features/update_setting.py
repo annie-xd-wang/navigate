@@ -38,6 +38,8 @@ import time
 # Third party imports
 
 # Local application imports
+from navigate.model.utils.exceptions import UserVisibleException
+from navigate.model.concurrency.concurrency_tools import SharedNDArray
 
 # Logger Setup
 p = __name__.split(".")[1]
@@ -98,6 +100,13 @@ class ChangeResolution:
         #: str: The zoom value to set for the microscope.
         self.zoom_value = zoom_value
 
+        #: list: Data buffer
+        self.data_buffer = None
+        #: int: The image width
+        self.img_width = 0
+        #: int: The image height
+        self.img_height = 0
+
     def signal_func(self):
         """Perform actions to change the resolution mode and update the active
          microscope.
@@ -119,7 +128,7 @@ class ChangeResolution:
             error_message = f"Can't change resolution: Microscope name {self.resolution_mode} isn't exist!"
             # logger.exception(error_message) doesn't work
             print(error_message)
-            raise Exception(error_message)
+            raise UserVisibleException(error_message)
         if (
             self.zoom_value
             not in self.model.configuration["configuration"]["microscopes"][
@@ -131,23 +140,30 @@ class ChangeResolution:
             )
             # logger.exception(error_message) doesn't work
             print(error_message)
-            raise Exception(error_message)
-        # check the image size
-        camera_config = self.model.configuration["experiment"]["CameraParameters"]
-        if (
-            camera_config[self.resolution_mode]["img_x_pixels"]
-            != camera_config[self.model.active_microscope_name]["img_x_pixels"]
-            or camera_config[self.resolution_mode]["img_y_pixels"]
-            != camera_config[self.model.active_microscope_name]["img_y_pixels"]
-        ):
-            error_message = f"Can't change resolution: Image sizes are different!"
-            # logger.exception(error_message) doesn't work
-            print(error_message)
-            raise Exception(error_message)
+            raise UserVisibleException(error_message)
         # pause data thread
         self.model.pause_data_thread()
         # end active microscope
         self.model.active_microscope.end_acquisition()
+        # check the image size
+        camera_config = self.model.configuration["experiment"]["CameraParameters"]
+        width = camera_config[self.resolution_mode]["img_x_pixels"]
+        height = camera_config[self.resolution_mode]["img_y_pixels"]
+        if ( camera_config[self.model.active_microscope_name]["img_x_pixels"] != width
+            or camera_config[self.model.active_microscope_name]["img_y_pixels"] != height
+        ):
+            if self.img_width != width or self.img_height != height:
+                # allocate new data buffer
+                self.data_buffer = [
+                    SharedNDArray(shape=(height, width), dtype="uint16")
+                    for _ in range(self.model.number_of_frames)
+                ]
+            self.model.data_buffer = self.data_buffer
+        else:
+            self.data_buffer = self.model.data_buffer
+
+        self.img_width = width
+        self.img_height = height
         # prepare new microscope
         self.model.configuration["experiment"]["MicroscopeState"][
             "microscope_name"
@@ -177,6 +193,21 @@ class ChangeResolution:
         resolution change process.
         """
         self.model.resume_data_thread()
+        if self.data_buffer is None:
+            return
+
+        if self.model.data_buffer != self.data_buffer:
+            # release new allocated data buffer
+            for i in range(self.model.number_of_frames):
+                try:
+                    self.data_buffer[i].shared_memory.close()
+                    self.data_buffer[i].shared_memory.unlink()
+                except FileNotFoundError:
+                    # If the shared memory has already been unlinked, ignore the error
+                    pass
+        else:
+            self.model.img_width = self.img_width
+            self.model.img_height = self.img_height
 
 
 class SetCameraParameters:

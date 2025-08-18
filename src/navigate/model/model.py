@@ -417,11 +417,10 @@ class Model:
             for _ in range(self.number_of_frames)
         ]
 
-        for microscope_name in self.microscopes:
-            self.microscopes[microscope_name].update_data_buffer(
-                self.data_buffer,
-                self.number_of_frames,
-            )
+        self.active_microscope.update_data_buffer(
+            self.data_buffer,
+            self.number_of_frames,
+        )
 
     def get_data_buffer(
         self, img_width: int = 512, img_height: int = 512
@@ -1312,6 +1311,10 @@ class Model:
         former_microscope = self.active_microscope_name
         if resolution_value != self.active_microscope_name:
             self.get_active_microscope()
+            self.active_microscope.update_data_buffer(
+                self.data_buffer,
+                self.number_of_frames,
+            )
             self.active_microscope.move_stage_offset(former_microscope)
 
         # update zoom if possible
