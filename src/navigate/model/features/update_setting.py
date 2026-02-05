@@ -31,6 +31,8 @@
 #
 
 # Standard library imports
+from itertools import product
+import ast
 import logging
 from functools import reduce
 import time
@@ -390,6 +392,119 @@ class UpdateExperimentSetting:
                 )
             except Exception as e:
                 logger.exception(f"Update image writer metadata failed: {e}")
+        # resume data thread
+        self.model.resume_data_thread()
+        return True
+
+    def cleanup(self):
+        self.model.resume_data_thread()
+
+
+class UpdateWaveformSetting:
+    def __init__(
+        self,
+        model,
+        amplitude: list[float] = [],
+        offset: list[float] = [],
+        option: int = 0,
+    ):
+        """Initialize the UpdateWaveformSetting class.
+        Parameters:
+        ----------
+        model : MicroscopeModel
+            The microscope model object used for resolution mode changes.
+        amplitude : list, optional
+            The list of amplitude values to update the waveform. Default is an empty list.
+        offset : list, optional
+            The list of offset values to update the waveform. Default is an empty list.
+        option : int, optional
+            The option value to update the waveform. Default is 0.
+            0: Zip
+            1: Product
+
+        """
+        self.model = model
+
+        #: dict: A dictionary defining the configuration for the resolution change
+        self.config_table = {
+            "signal": {
+                "init": self.pre_sigal_func,
+                "main": self.signal_func,
+                "cleanup": self.cleanup,
+            },
+            "node": {"device_related": True},
+        }
+        if type(amplitude) == str:
+            try:
+                amplitude = ast.literal_eval(amplitude)
+            except Exception as e:
+                logger.error(f"Failed to parse amplitude string: {e}")
+                amplitude = []
+        if type(offset) == str:
+            try:
+                offset = ast.literal_eval(offset)
+            except Exception as e:
+                logger.error(f"Failed to parse offset string: {e}")
+                offset = []
+        self.amplitude = amplitude
+        self.offset = offset
+        self.option = option
+        self.initialized = False
+        self._idx = 0
+        self.amp_offset = []
+
+    def pre_sigal_func(self):
+        if self.initialized:
+            return
+        self.initialized = True
+        if self.option == 0:  # zip
+            self.amp_offset = list(zip(self.amplitude, self.offset))
+        else:  # product
+            self.amp_offset = list(product(self.amplitude, self.offset))
+        self._idx = 0
+        if self.amp_offset == []:
+            self.amp_offset = [(0, 0)]
+
+    def signal_func(self):
+        """Perform actions to change the resolution mode and update the active
+         microscope.
+
+        This method carries out actions to change the resolution mode of the microscope
+         by reconfiguring the microscope settings, updating the active microscope, and
+         resuming data acquisition.
+
+        Returns:
+        -------
+        bool
+            A boolean value indicating the success of the resolution change process.
+        """
+        # get microscope name and zoom value
+        exp_config = self.model.configuration["experiment"]["MicroscopeState"]
+        microscope_name = exp_config["microscope_name"]
+        zoom_value = exp_config["zoom"]
+        laser = None
+        for k in exp_config["channels"].keys():
+            if exp_config["channels"][k]["is_selected"] or laser is None:
+                laser = exp_config["channels"][k]["laser"]
+                break
+        # pause data thread
+        self.model.pause_data_thread()
+        # end active microscope
+        self.model.active_microscope.end_acquisition()
+        # update waveform parameters
+        self.model.configuration["waveform_constants"]["remote_focus_constants"][
+            microscope_name
+        ][zoom_value][laser]["amplitude"] = self.amp_offset[self._idx][0]
+        self.model.configuration["waveform_constants"]["remote_focus_constants"][
+            microscope_name
+        ][zoom_value][laser]["offset"] = self.amp_offset[self._idx][1]
+        self._idx += 1
+        # set parameters and prepare active microscope
+        waveform_dict = self.model.active_microscope.prepare_acquisition()
+        self.model.event_queue.put(("waveform", waveform_dict))
+        self.model.frame_id = 0
+        # prepare channel
+        self.model.active_microscope.prepare_next_channel()
         # resume data thread
         self.model.resume_data_thread()
         return True
