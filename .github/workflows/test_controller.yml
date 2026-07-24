@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - clean-random-fix-0721-test
   pull_request:
   workflow_dispatch:
 
