@@ -31,3 +31,4 @@ jobs:
           NAVIGATE_RUN_PLUGIN_INTEGRATION: "1"
         run: |
           python -m pytest test/controller
+          python -m pytest test/model
