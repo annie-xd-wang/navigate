@@ -31,3 +31,5 @@ jobs:
           NAVIGATE_RUN_PLUGIN_INTEGRATION: "1"
         run: |
           python -m pytest test/controller/test_controller.py
+          python -m pytest test/controller/sub_controllers/test_acquire_bar.py
+          python -m pytest test/controller/sub_controllers/test_camera_settings.py
