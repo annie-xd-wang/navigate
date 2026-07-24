@@ -30,6 +30,4 @@ jobs:
         env:
           NAVIGATE_RUN_PLUGIN_INTEGRATION: "1"
         run: |
-          python3 -m pytest test/config
-          python3 -m pytest test/controller
-          python3 -m pytest test/model
+          python3 -m pytest
