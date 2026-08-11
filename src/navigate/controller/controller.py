@@ -1148,6 +1148,13 @@ class Controller:
                 args=(microscope_name,),
             )
 
+        elif command == "set_stage_volts_per_micron":
+            self.threads_pool.createThread(
+                resourceName="model",
+                target=self.set_stage_volts_per_micron,
+                args=(args[0], args[1], args[2]),
+            )
+
         elif command == "move_stage_and_update_info":
             """update stage view to show the position
 
@@ -1858,6 +1865,14 @@ class Controller:
         None
         """
         self.model.update_stage_limits(microscope_name)
+
+    def set_stage_volts_per_micron(
+        self, microscope_name: str, axis: str, volts_per_micron: str
+    ) -> None:
+        """Apply an NI-stage calibration formula to a live stage device."""
+        self.model.set_stage_volts_per_micron(
+            microscope_name, axis, volts_per_micron
+        )
 
     def update_stage_controller_silent(self, ret_pos_dict: dict[str, Any]) -> None:
         """Send updates to the stage GUI

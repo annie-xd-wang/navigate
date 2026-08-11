@@ -140,6 +140,7 @@ class Model:
                 microscope_name, configuration, devices_dict, args.synthetic_hardware
             )
             self.microscopes[microscope_name].output_event_queue = event_queue
+        self.load_stage_volts_per_micron_from_experiment()
         # register device commands if there is any.
 
         #: str: Name of the active microscope.
@@ -942,6 +943,32 @@ class Model:
         """
         microscope = self.microscopes[microscope_name]
         microscope.update_stage_limits()
+
+    def set_stage_volts_per_micron(
+        self, microscope_name: str, axis: str, volts_per_micron: str
+    ) -> None:
+        """Apply a volts-per-micron formula to an NI stage axis."""
+        stage = self.microscopes[microscope_name].stages[axis]
+        stage.set_volts_per_micron(volts_per_micron)
+
+    def load_stage_volts_per_micron_from_experiment(self) -> None:
+        """Apply all saved NI-stage calibration overrides after device startup."""
+        stage_parameters = self.configuration["experiment"].get(
+            "StageParameters", {}
+        )
+        suffix = "_volts_per_micron"
+        for microscope_name, microscope_parameters in stage_parameters.items():
+            microscope = self.microscopes.get(microscope_name)
+            if microscope is None or not hasattr(microscope_parameters, "items"):
+                continue
+            for key, volts_per_micron in microscope_parameters.items():
+                if not key.endswith(suffix):
+                    continue
+                axis = key[: -len(suffix)]
+                stage = microscope.stages.get(axis)
+                setter = getattr(stage, "set_volts_per_micron", None)
+                if callable(setter):
+                    setter(volts_per_micron)
 
     def stop_stage(self) -> None:
         """Stop the stages."""

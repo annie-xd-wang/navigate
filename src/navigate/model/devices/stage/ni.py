@@ -345,6 +345,9 @@ class NIStage(StageBase, NIDevice):
             except Exception:
                 logger.exception(f"Error stopping task: {traceback.format_exc()}")
 
+    def set_volts_per_micron(self, volts):
+        self.volts_per_micron = volts
+
     def __del__(self) -> None:
         """Close the Galvo stage."""
         self.close()

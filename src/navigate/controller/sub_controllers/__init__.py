@@ -20,6 +20,7 @@ from .microscope_popup import MicroscopePopupController  # noqa
 from .adaptive_optics import AdaptiveOpticsPopupController  # noqa
 from .histogram import HistogramController  # noqa
 from .stages_advanced import AdvancedStageParametersController  # noqa
+from .galvo_ni_stage_setting import GalvoNIStageSettingController  # noqa
 from .diagnostics_popup import DiagnosticsPopupController  # noqa
 
 # from .uninstall_plugin_controller import UninstallPluginController  # noqa

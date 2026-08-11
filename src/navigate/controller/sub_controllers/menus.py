@@ -57,6 +57,7 @@ from navigate.view.popups.camera_setting_popup import (
     AdvancedCameraSettingPopup,
 )
 from navigate.view.popups.stages_advanced_popup import AdvancedStageParametersPopup
+from navigate.view.popups.galvo_ni_stage_setting_popup import GalvoNIStageSettingPopup
 from navigate.view.popups.diagnostics_popup import DiagnosticsPopup
 
 # Local Controller Imports
@@ -73,6 +74,7 @@ from navigate.controller.sub_controllers import (
     AdaptiveOpticsPopupController,
     UninstallPluginController,
     AdvancedStageParametersController,
+    GalvoNIStageSettingController,
     DiagnosticsPopupController,
 )
 from navigate.controller.sub_controllers.camera_settings import (
@@ -386,6 +388,13 @@ class MenuController(GUIController):
                 "Advanced Stage Parameters": [
                     "standard",
                     self.stage_limits_popup,
+                    None,
+                    None,
+                    None,
+                ],
+                "Galvo (NI) Stage Setting": [
+                    "standard",
+                    self.galvo_ni_stage_setting_popup,
                     None,
                     None,
                     None,
@@ -1604,6 +1613,19 @@ class MenuController(GUIController):
             self.parent_controller,
             "stage_limits_popup_controller",
             stage_limits_controller,
+        )
+
+    def galvo_ni_stage_setting_popup(self, *args, **kwargs) -> None:
+        """Pop up the Galvo (NI) stage calibration setting window."""
+        if hasattr(self.parent_controller, "galvo_ni_stage_setting_controller"):
+            self.parent_controller.galvo_ni_stage_setting_controller.showup()
+            return
+        popup = GalvoNIStageSettingPopup(self.view)
+        controller = GalvoNIStageSettingController(popup, self.parent_controller)
+        setattr(
+            self.parent_controller,
+            "galvo_ni_stage_setting_controller",
+            controller,
         )
 
     def open_diagnostics(self, *args, **kwargs) -> None:
