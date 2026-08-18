@@ -45,12 +45,36 @@ from navigate.view.custom_widgets.LabelInputWidgetFactory import LabelInput
 from navigate.view.custom_widgets.validation import ValidatedSpinbox
 from navigate.view.custom_widgets.validation import ValidatedEntry
 from navigate.view.custom_widgets.common import configure_grid, themed_grid, uniform_grid
-from navigate.view.theme import get_theme_color, get_theme_space_px
+from navigate.view.theme import get_theme_color, get_theme_preset, get_theme_space_px
 import navigate
 
 # Logger Setup
 p = __name__.split(".")[1]
 logger = logging.getLogger(p)
+
+
+def _stage_arrow_button_options() -> dict:
+    """Return styling for dark-theme stage movement arrow buttons."""
+    if get_theme_preset() != "classic_night":
+        return {"borderwidth": 0}
+
+    panel_bg = get_theme_color("panel_bg")
+    return {
+        "activebackground": panel_bg,
+        "background": panel_bg,
+        "borderwidth": 0,
+        "highlightbackground": "#526070",
+        "highlightthickness": 0,
+        "padx": 0,
+        "pady": 0,
+        "relief": tk.FLAT,
+        "overrelief": tk.FLAT,
+    }
+
+
+def _stage_arrow_button(parent, image) -> HoverTkButton:
+    """Create an arrow button with the active theme's visual treatment."""
+    return HoverTkButton(parent, image=image, **_stage_arrow_button_options())
 
 
 class StageControlNotebook(ttk.Notebook):
@@ -434,23 +458,19 @@ class OtherAxisFrame(ttk.Labelframe):
         self.stage_control_tab = stage_control_tab
 
         #: HoverTkButton: Up button.
-        self.up_btn = HoverTkButton(
-            self, image=self.stage_control_tab.d_up_1x_image, borderwidth=0
-        )
+        self.up_btn = _stage_arrow_button(self, self.stage_control_tab.up_1x_image)
 
         #: HoverTkButton: 5x Up button.
-        self.large_up_btn = HoverTkButton(
-            self, image=self.stage_control_tab.up_5x_image, borderwidth=0
+        self.large_up_btn = _stage_arrow_button(
+            self, self.stage_control_tab.up_5x_image
         )
 
         #: HoverTkButton: Down button.
-        self.down_btn = HoverTkButton(
-            self, image=self.stage_control_tab.down_1x_image, borderwidth=0
-        )
+        self.down_btn = _stage_arrow_button(self, self.stage_control_tab.down_1x_image)
 
         #: HoverTkButton: 5x Down button.
-        self.large_down_btn = HoverTkButton(
-            self, image=self.stage_control_tab.down_5x_image, borderwidth=0
+        self.large_down_btn = _stage_arrow_button(
+            self, self.stage_control_tab.down_5x_image
         )
 
         if self.name.lower() == "theta":
@@ -480,6 +500,7 @@ class OtherAxisFrame(ttk.Labelframe):
             column=1,
             rowspan=1,
             columnspan=1,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -489,6 +510,7 @@ class OtherAxisFrame(ttk.Labelframe):
             column=1,
             rowspan=1,
             columnspan=1,
+            sticky=None,
             pady=("space_1", 0),
         )
         themed_grid(
@@ -524,6 +546,7 @@ class OtherAxisFrame(ttk.Labelframe):
             column=1,
             rowspan=1,
             columnspan=1,
+            sticky=None,
             pady=(0, "space_1"),
         )
         themed_grid(
@@ -532,6 +555,7 @@ class OtherAxisFrame(ttk.Labelframe):
             column=1,
             rowspan=1,
             columnspan=1,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -818,43 +842,37 @@ class XYFrame(ttk.Labelframe):
         self.stage_control_tab = stage_control_tab
 
         #: HoverTkButton: Up button.
-        self.up_y_btn = HoverTkButton(
-            self, image=self.stage_control_tab.up_1x_image, borderwidth=0
-        )
+        self.up_y_btn = _stage_arrow_button(self, self.stage_control_tab.up_1x_image)
 
         #: HoverTkButton: Up button.
-        self.large_up_y_btn = HoverTkButton(
-            self, image=self.stage_control_tab.up_5x_image, borderwidth=0
+        self.large_up_y_btn = _stage_arrow_button(
+            self, self.stage_control_tab.up_5x_image
         )
 
         #: HoverTkButton: Down button.
-        self.down_y_btn = HoverTkButton(
-            self, image=self.stage_control_tab.down_1x_image, borderwidth=0
+        self.down_y_btn = _stage_arrow_button(
+            self, self.stage_control_tab.down_1x_image
         )
 
         #: HoverTkButton: Down button.
-        self.large_down_y_btn = HoverTkButton(
-            self, image=self.stage_control_tab.down_5x_image, borderwidth=0
+        self.large_down_y_btn = _stage_arrow_button(
+            self, self.stage_control_tab.down_5x_image
         )
 
         #: HoverTkButton: Right button.
-        self.up_x_btn = HoverTkButton(
-            self, image=self.stage_control_tab.right_1x_image, borderwidth=0
-        )
+        self.up_x_btn = _stage_arrow_button(self, self.stage_control_tab.right_1x_image)
 
         #: HoverTkButton: Right 5x button.
-        self.large_up_x_btn = HoverTkButton(
-            self, image=self.stage_control_tab.right_5x_image, borderwidth=0
+        self.large_up_x_btn = _stage_arrow_button(
+            self, self.stage_control_tab.right_5x_image
         )
 
         #: HoverTkButton: Left button.
-        self.down_x_btn = HoverTkButton(
-            self, image=self.stage_control_tab.left_1x_image, borderwidth=0
-        )
+        self.down_x_btn = _stage_arrow_button(self, self.stage_control_tab.left_1x_image)
 
         #: HoverTkButton: Left 5x button.
-        self.large_down_x_btn = HoverTkButton(
-            self, image=self.stage_control_tab.left_5x_image, borderwidth=0
+        self.large_down_x_btn = _stage_arrow_button(
+            self, self.stage_control_tab.left_5x_image
         )
 
         #: LabelInput: Increment spinbox.
@@ -891,6 +909,7 @@ class XYFrame(ttk.Labelframe):
             column=4,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -901,6 +920,7 @@ class XYFrame(ttk.Labelframe):
             column=4,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -923,6 +943,7 @@ class XYFrame(ttk.Labelframe):
             column=4,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -933,6 +954,7 @@ class XYFrame(ttk.Labelframe):
             column=4,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -944,6 +966,7 @@ class XYFrame(ttk.Labelframe):
             column=0,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -954,6 +977,7 @@ class XYFrame(ttk.Labelframe):
             column=2,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -965,6 +989,7 @@ class XYFrame(ttk.Labelframe):
             column=6,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
@@ -974,6 +999,7 @@ class XYFrame(ttk.Labelframe):
             column=8,
             rowspan=2,
             columnspan=2,
+            sticky=None,
             padx="space_1",
             pady="space_1",
         )
