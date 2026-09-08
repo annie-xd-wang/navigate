@@ -149,7 +149,7 @@ def controller(tk_root):
 
     try:
         controller.execute("exit")
-    except SystemExit:
+    except (AttributeError, SystemExit):
         pass
 
     # Tear down the controller properly
@@ -933,6 +933,17 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
             "waveform_templates",
         ]
     }
+    controller.configuration["experiment"]["CameraParameters"] = {
+        "Mesoscale": {
+            "trigger_source": "Software",
+            "trigger_source_backup": "External",
+        },
+        "Synthetic Scope": {
+            "trigger_source": "Software",
+            "trigger_source_backup": "Internal",
+        },
+        "Scope Without Backup": {"trigger_source": "Software"},
+    }
     controller.sloppy_stop = MagicMock()
     controller.update_experiment_setting = MagicMock()
     controller.model = MagicMock()
@@ -954,6 +965,10 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
         content_dict=controller.configuration["gui"],
         filename=controller.gui_configuration_path.name,
     )
+    camera_parameters = controller.configuration["experiment"]["CameraParameters"]
+    assert camera_parameters["Mesoscale"]["trigger_source"] == "External"
+    assert camera_parameters["Synthetic Scope"]["trigger_source"] == "Internal"
+    assert camera_parameters["Scope Without Backup"]["trigger_source"] == "Software"
 
 
 def test_execute_adaptive_optics(controller):

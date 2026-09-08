@@ -73,6 +73,22 @@ def test_preload_keeps_loaded_sections_as_shared_dicts(loaded_configuration):
         assert isinstance(configuration[name], DictProxy)
 
 
+def test_preload_removes_camera_trigger_source_backups(loaded_configuration):
+    manager, configuration = loaded_configuration
+
+    preload_configuration(manager, configuration)
+
+    camera_parameters = configuration["experiment"]["CameraParameters"]
+    microscope_name = configuration["experiment"]["MicroscopeState"]["microscope_name"]
+    camera_parameters["trigger_source_backup"] = "External"
+    camera_parameters[microscope_name]["trigger_source_backup"] = "External"
+
+    preload_configuration(manager, configuration)
+
+    assert "trigger_source_backup" not in camera_parameters
+    assert "trigger_source_backup" not in camera_parameters[microscope_name]
+
+
 def test_preload_renames_lasers_without_user_facing_report(loaded_configuration):
     manager, configuration = loaded_configuration
     microscope = configuration["configuration"]["microscopes"]["Mesoscale"]

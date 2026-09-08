@@ -369,6 +369,17 @@ class Microscope:
         # connect daq and camera in synthetic mode
         if self.daq is not None and type(self.daq).__name__ == "SyntheticDAQ":
             self.daq.add_camera(self.microscope_name, self.camera)
+            # set default trigger mode to software if daq is synthetic
+            self.configuration["experiment"]["CameraParameters"][self.microscope_name][
+                "trigger_source_backup"
+            ] = self.configuration["experiment"]["CameraParameters"][
+                self.microscope_name
+            ].get(
+                "trigger_source"
+            )
+            self.configuration["experiment"]["CameraParameters"][self.microscope_name][
+                "trigger_source"
+            ] = "Software"
 
     def update_data_buffer(
         self, data_buffer: List[np.ndarray], number_of_frames: int

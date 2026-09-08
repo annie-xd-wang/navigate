@@ -271,6 +271,10 @@ def repair_camera_parameters(context: PreloadContext) -> None:
             if camera_setting_dict[k] < 1:
                 camera_setting_dict[k] = camera_parameters_dict_sample[k]
 
+        # remove camera trigger backup before loading
+        if "trigger_source_backup" in camera_setting_dict:
+            del camera_setting_dict["trigger_source_backup"]
+
     # # cleanup
     # for k in configuration["experiment"]["CameraParameters"].keys():
     #     if k in camera_parameters_dict_sample.keys():
