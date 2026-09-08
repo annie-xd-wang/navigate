@@ -1469,6 +1469,8 @@ class Controller:
             """
             self.sloppy_stop()
             self.update_experiment_setting()
+            # restore camera triggers in the experiment file
+            self._restore_camera_trigger_setting()
             file_directory = os.path.join(get_navigate_path(), "config")
             for config_name, filename in [
                 ("experiment", "experiment.yml"),
@@ -2061,3 +2063,35 @@ class Controller:
         """
         for event_name, event_handler in events.items():
             self.register_event_listener(event_name, event_handler)
+
+    def _restore_camera_trigger_setting(self):
+        """Restore the camera trigger setting."""
+        for microscope_name in self.configuration.get("experiment", {}).get(
+            "CameraParameters", {}
+        ):
+            if (
+                "trigger_source_backup"
+                in self.configuration["experiment"]["CameraParameters"][microscope_name]
+            ):
+                if (
+                    self.configuration["experiment"]["CameraParameters"][
+                        microscope_name
+                    ].get("trigger_source_backup")
+                    is not None
+                ):
+                    self.configuration["experiment"]["CameraParameters"][
+                        microscope_name
+                    ]["trigger_source"] = self.configuration["experiment"][
+                        "CameraParameters"
+                    ][
+                        microscope_name
+                    ][
+                        "trigger_source_backup"
+                    ]
+                else:
+                    del self.configuration["experiment"]["CameraParameters"][
+                        microscope_name
+                    ]["trigger_source"]
+                del self.configuration["experiment"]["CameraParameters"][
+                    microscope_name
+                ]["trigger_source_backup"]
