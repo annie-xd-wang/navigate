@@ -38,6 +38,7 @@ from typing import Optional
 
 import yaml
 
+from navigate.config.config import get_navigate_path
 from navigate.config.configuration_schema import (
     CollectionSpec,
     SettingSpec,
@@ -1088,7 +1089,9 @@ class Configurator:
             dialog_options["initialdir"] = str(self.last_configuration_path.parent)
             dialog_options["initialfile"] = self.last_configuration_path.name
         else:
-            dialog_options["initialfile"] = "new-config.yaml"
+            base = Path(get_navigate_path())
+            dialog_options["initialdir"] = str(base.joinpath("config"))
+            dialog_options["initialfile"] = "configuration.yaml"
         filename = filedialog.asksaveasfilename(**dialog_options)
         if not filename:
             return
