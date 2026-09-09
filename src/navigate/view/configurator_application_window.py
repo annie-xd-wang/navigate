@@ -47,7 +47,7 @@ class ConfigurationAssistantWindow(ttk.Frame):
 
     def __init__(self, root: tk.Tk, *args, **kwargs) -> None:
         self.root = root
-        self.root.title("NavigateConfiguration Assistant")
+        self.root.title("Navigate Configuration Assistant")
         window_width, window_height = 1100, 720
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
