@@ -32,6 +32,7 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional
+from pathlib import Path
 
 # Local Imports
 from navigate.view.theme import (
@@ -46,12 +47,20 @@ class ConfigurationAssistantWindow(ttk.Frame):
 
     def __init__(self, root: tk.Tk, *args, **kwargs) -> None:
         self.root = root
-        self.root.title("New Configuration Assistant")
+        self.root.title("NavigateConfiguration Assistant")
         window_width, window_height = 1100, 720
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         position_x = max(0, (screen_width - window_width) // 2)
         position_y = max(0, (screen_height - window_height) // 2)
+
+        # keep icons relative to view directory structure
+        view_directory = Path(__file__).resolve().parent
+        try:
+            photo_image = view_directory.joinpath("icon", "mic.png")
+            self.root.iconphoto(True, tk.PhotoImage(file=photo_image))
+        except tk.TclError:
+            pass
         self.root.geometry(f"{window_width}x{window_height}+{position_x}+{position_y}")
         self.root.minsize(800, 500)
         self.root.rowconfigure(0, weight=1)
