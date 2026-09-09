@@ -163,8 +163,12 @@ class Configurator:
         self.view.device_info_frame.horizontal_scrollbar.config(
             command=self.view.device_info_frame.settings_canvas.xview
         )
+        self.view.device_info_frame.vertical_scrollbar.config(
+            command=self.view.device_info_frame.settings_canvas.yview
+        )
         self.view.device_info_frame.settings_canvas.config(
-            xscrollcommand=self.view.device_info_frame.horizontal_scrollbar.set
+            xscrollcommand=self.view.device_info_frame.horizontal_scrollbar.set,
+            yscrollcommand=self.view.device_info_frame.vertical_scrollbar.set,
         )
 
     def on_cancel(self) -> None:
@@ -1730,7 +1734,7 @@ class Configurator:
         )
 
     def update_scrollregion(self, _event: tk.Event) -> None:
-        """Update horizontal scrolling for dynamically created setting widgets."""
+        """Update scrolling for dynamically created setting widgets."""
         canvas = self.view.device_info_frame.settings_canvas
         canvas.configure(scrollregion=canvas.bbox(tk.ALL))
 

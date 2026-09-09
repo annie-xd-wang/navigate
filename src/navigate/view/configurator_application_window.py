@@ -216,7 +216,7 @@ class DeviceInfoFrame(ttk.LabelFrame):
             row=2,
             column=0,
             sticky=tk.NSEW,
-            padx=get_theme_space_px(3),
+            padx=get_theme_padding_px((3, 0)),
             pady=get_theme_padding_px((0, 3)),
         )
         self.settings_frame = ttk.Frame(self.settings_canvas)
@@ -224,6 +224,14 @@ class DeviceInfoFrame(ttk.LabelFrame):
         self.settings_frame.columnconfigure(1, weight=1, minsize=160)
         self.settings_window = self.settings_canvas.create_window(
             (0, 0), anchor=tk.NW, window=self.settings_frame
+        )
+        self.vertical_scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL)
+        self.vertical_scrollbar.grid(
+            row=2,
+            column=1,
+            sticky=tk.NS,
+            padx=get_theme_padding_px((0, 3)),
+            pady=get_theme_padding_px((0, 3)),
         )
         self.horizontal_scrollbar = ttk.Scrollbar(self, orient=tk.HORIZONTAL)
         self.horizontal_scrollbar.grid(
