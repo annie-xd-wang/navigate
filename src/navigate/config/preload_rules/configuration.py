@@ -1355,7 +1355,12 @@ def _normalize_setting_value(value: Any, spec: SettingSpec, *, name: str = "") -
 
 def _allows_structured_setting_value(name: str, value: Any) -> bool:
     """Return whether a structured value is valid for a legacy text-edit schema."""
-    if name in {"axes", "axes_mapping", "joystick_axes"}:
+    if name in {
+        "axes",
+        "axes_mapping",
+        "feedback_alignment",
+        "joystick_axes",
+    }:
         return isinstance(value, (list, ListProxy))
     if name == "coupled_axes":
         return isinstance(value, (dict, DictProxy))

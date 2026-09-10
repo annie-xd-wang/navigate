@@ -16,7 +16,10 @@ from navigate.config.preload import (
     _log_report,
     preload_configuration,
 )
-from navigate.config.preload_rules.configuration import _default_reference_value
+from navigate.config.preload_rules.configuration import (
+    _allows_structured_setting_value,
+    _default_reference_value,
+)
 from navigate.config.preload_rules.positions import validate_positions
 from navigate.config.configuration_schema import SettingSpec
 
@@ -55,6 +58,17 @@ def test_preload_warning_and_fatal_logs_are_wrapped_with_separators(caplog):
         f"{separator}\nPreload issue fatal.path: fatal message\n{separator}"
         in caplog.text
     )
+
+
+def test_preload_allows_stage_list_backed_text_settings():
+    """Stage list settings are valid structured values for legacy text fields."""
+    for name in (
+        "axes",
+        "axes_mapping",
+        "feedback_alignment",
+        "joystick_axes",
+    ):
+        assert _allows_structured_setting_value(name, ["x"])
 
 
 def test_preload_keeps_loaded_sections_as_shared_dicts(loaded_configuration):
