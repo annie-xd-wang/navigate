@@ -211,9 +211,9 @@ def normalize_laser_hardware(context: PreloadContext) -> None:
                 if isinstance(power_hardware, (dict, DictProxy))
                 else "Synthetic"
             )
-            if onoff_type != "Synthetic":
+            if not _is_synthetic_type(onoff_type):
                 hardware_config = dict(onoff_hardware)
-            elif power_type != "Synthetic":
+            elif not _is_synthetic_type(power_type):
                 hardware_config = dict(power_hardware)
             else:
                 hardware_config = {"type": "Synthetic"}
@@ -854,6 +854,12 @@ def normalize_device_type_names(context: PreloadContext) -> None:
                 continue
             current_type = hardware.get("type")
             normalized_type = canonical_device_type(category, current_type)
+            if (
+                category == "daq"
+                and isinstance(normalized_type, str)
+                and "." in normalized_type
+            ):
+                normalized_type = normalized_type.split(".")[1]
             if normalized_type is None or normalized_type == current_type:
                 continue
             hardware["type"] = normalized_type
@@ -952,7 +958,7 @@ def _iter_reference_devices(microscope_config) -> list[tuple[str, Any, int]]:
 def _iter_type_devices(microscope_config) -> list[tuple[str, Any, int]]:
     """Return top-level device dictionaries whose hardware type can be normalized."""
     devices = []
-    for category in DEVICE_REFERENCE_FIELDS:
+    for category in ("daq", *DEVICE_REFERENCE_FIELDS):
         if category == "stage":
             continue
         if category not in microscope_config:

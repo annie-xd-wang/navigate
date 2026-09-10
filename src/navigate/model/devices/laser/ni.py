@@ -103,11 +103,11 @@ class NILaser(LaserBase, NIDevice):
             "laser"
         ][device_id]["onoff"]["hardware"].get("type", None)
 
-        if analog == "NI" and digital == "NI":
+        if self._is_ni_type(analog) and self._is_ni_type(digital):
             modulation_type = "mixed"
-        elif analog == "NI":
+        elif self._is_ni_type(analog):
             modulation_type = "analog"
-        elif digital == "NI":
+        elif self._is_ni_type(digital):
             modulation_type = "digital"
         else:
             raise ValueError("Laser modulation type not recognized.")
@@ -286,3 +286,7 @@ class NILaser(LaserBase, NIDevice):
                 self.laser_do_task.close()
             except Exception:
                 logger.exception(f"Error stopping task: {traceback.format_exc()}")
+
+    def _is_ni_type(self, hardware_type: str) -> bool:
+        """Check if the hardware type is NI type."""
+        return hardware_type.lower() in ("ni", "ni.ni")

@@ -965,6 +965,27 @@ def test_preload_normalizes_device_types_before_reference_check(loaded_configura
     assert any(change.rule == "device-type-normalized" for change in report.changes)
 
 
+@pytest.mark.parametrize(
+    "raw_type,expected",
+    [
+        ("ni.NI", "NI"),
+        ("asi.ASI", "ASI"),
+        ("synthetic.Synthetic", "Synthetic"),
+    ],
+)
+def test_preload_normalizes_prefixed_daq_type_to_startup_token(
+    loaded_configuration, raw_type, expected
+):
+    manager, configuration = loaded_configuration
+    microscope = configuration["configuration"]["microscopes"]["Mesoscale"]
+    microscope["daq"]["hardware"]["type"] = raw_type
+
+    report = preload_configuration(manager, configuration)
+
+    assert microscope["daq"]["hardware"]["type"] == expected
+    assert any(change.rule == "device-type-normalized" for change in report.changes)
+
+
 def test_preload_silently_adds_optional_reference_field(
     loaded_configuration, monkeypatch
 ):
