@@ -2069,12 +2069,14 @@ class Controller:
 
     def _restore_camera_trigger_setting(self):
         """Restore the camera trigger setting."""
-        for microscope_name in self.configuration.get("experiment", {}).get(
-            "CameraParameters", {}
+        for microscope_name in (
+            self.configuration.get("configuration", {}).get("microscopes", {}).keys()
         ):
             if (
                 "trigger_source_backup"
-                in self.configuration["experiment"]["CameraParameters"][microscope_name]
+                in self.configuration["experiment"]["CameraParameters"][
+                    microscope_name
+                ].keys()
             ):
                 if (
                     self.configuration["experiment"]["CameraParameters"][
