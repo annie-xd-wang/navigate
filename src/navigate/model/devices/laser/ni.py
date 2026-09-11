@@ -33,7 +33,7 @@
 # Standard Library Imports
 import logging
 import traceback
-from typing import Any
+from typing import Any, Union
 
 # Third Party Imports
 import nidaqmx
@@ -287,6 +287,21 @@ class NILaser(LaserBase, NIDevice):
             except Exception:
                 logger.exception(f"Error stopping task: {traceback.format_exc()}")
 
-    def _is_ni_type(self, hardware_type: str) -> bool:
-        """Check if the hardware type is NI type."""
-        return hardware_type.lower() in ("ni", "ni.ni")
+    def _is_ni_type(self, hardware_type: Union[str, None]) -> bool:
+        """Check if the hardware type is NI type.
+
+        Parameters
+        ----------
+        hardware_type : Union[str, None]
+            The hardware type to check.
+
+        Returns
+        -------
+        bool
+            True if the hardware type is NI type, False otherwise.
+        """
+        return (
+            hardware_type
+            and isinstance(hardware_type, str)
+            and hardware_type.lower() in ("ni", "ni.ni")
+        )

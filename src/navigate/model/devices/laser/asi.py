@@ -32,7 +32,7 @@
 
 #  Standard Library Imports
 import logging
-from typing import Any
+from typing import Any, Union
 
 # Third Party Imports
 
@@ -269,6 +269,21 @@ class ASILaser(LaserBase, SerialDevice):
         """Destructor for the ASILaser class."""
         self.close()
 
-    def _is_asi_type(self, hardware_type: str) -> bool:
-        """Check if the hardware type is ASI type."""
-        return hardware_type.lower() in ("asi", "asi.asi")
+    def _is_asi_type(self, hardware_type: Union[str, None]) -> bool:
+        """Check if the hardware type is ASI type.
+
+        Parameters
+        ----------
+        hardware_type : Union[str, None]
+            The hardware type to check.
+
+        Returns
+        -------
+        bool
+            True if the hardware type is ASI type, False otherwise.
+        """
+        return (
+            hardware_type
+            and isinstance(hardware_type, str)
+            and hardware_type.lower() in ("asi", "asi.asi")
+        )
