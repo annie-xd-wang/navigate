@@ -925,6 +925,7 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
     controller.configuration = {
         name: {"name": name}
         for name in [
+            "configuration",
             "experiment",
             "multi_positions",
             "gui",
@@ -932,6 +933,12 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
             "rest_api_config",
             "waveform_templates",
         ]
+    }
+    controller.configuration["configuration"]["microscopes"] = {
+        "Mesoscale": {},
+        "Synthetic Scope": {},
+        "Scope Without Backup": {},
+        "Scope With No Trigger": {},
     }
     controller.configuration["experiment"]["CameraParameters"] = {
         "Mesoscale": {
@@ -943,6 +950,10 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
             "trigger_source_backup": "Internal",
         },
         "Scope Without Backup": {"trigger_source": "Software"},
+        "Scope With No Trigger": {
+            "trigger_source": "Software",
+            "trigger_source_backup": None,
+        },
     }
     controller.sloppy_stop = MagicMock()
     controller.update_experiment_setting = MagicMock()
@@ -969,6 +980,11 @@ def test_execute_exit_saves_gui_configuration_to_loaded_path(tmp_path):
     assert camera_parameters["Mesoscale"]["trigger_source"] == "External"
     assert camera_parameters["Synthetic Scope"]["trigger_source"] == "Internal"
     assert camera_parameters["Scope Without Backup"]["trigger_source"] == "Software"
+    assert "trigger_source" not in camera_parameters["Scope With No Trigger"]
+    assert all(
+        "trigger_source_backup" not in parameters
+        for parameters in camera_parameters.values()
+    )
 
 
 def test_execute_adaptive_optics(controller):
