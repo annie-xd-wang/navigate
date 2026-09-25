@@ -33,7 +33,7 @@
 from __future__ import annotations
 import platform
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import logging
 import threading
 from typing import Any, Dict, Optional
@@ -53,6 +53,7 @@ import numpy as np
 from navigate.controller.sub_controllers.gui import GUIController
 from navigate.model.analysis.camera import compute_signal_to_noise
 from navigate.tools.file_functions import get_ram_info
+from navigate.tools.rotation import calculate_rotation
 from navigate.config import get_navigate_path, update_config_dict
 from navigate.tools.decorators import performance_monitor
 from navigate.view.theme import get_theme_color, get_theme_font
@@ -363,6 +364,13 @@ class BaseViewController(GUIController, ABaseViewController):
         self.menu.add_separator()
         self.menu.add_command(label="Move Here", command=self.move_stage)
         self.menu.add_command(label="Mark Position", command=self.mark_position)
+        self.rotation_helper_enabled = tk.BooleanVar(master=self.canvas, value=False)
+        self.rotation_helper_frame = None
+        self.menu.add_checkbutton(
+            label="Rotation Helper",
+            variable=self.rotation_helper_enabled,
+            command=self.rotate_helper,
+        )
 
         self._bind_visibility_events()
 
@@ -1226,6 +1234,64 @@ class BaseViewController(GUIController, ABaseViewController):
 
             # Place the stage position in the multi-position table.
             self.parent_controller.execute("mark_position", stage_position)
+
+    def rotate_helper(self) -> None:
+        """Show or hide the rotation controls at the bottom of the viewer."""
+        if not self.rotation_helper_enabled.get():
+            if self.rotation_helper_frame is not None:
+                self.rotation_helper_frame.place_forget()
+            return
+
+        if self.rotation_helper_frame is None:
+            self.rotation_helper_frame = ttk.Frame(self.canvas, padding=2)
+            ttk.Button(
+                self.rotation_helper_frame,
+                text="↺",
+                width=3,
+                command=lambda: self.rotate(1),
+            ).pack(side=tk.LEFT)
+            ttk.Button(
+                self.rotation_helper_frame,
+                text="↻",
+                width=3,
+                command=lambda: self.rotate(-1),
+            ).pack(side=tk.LEFT)
+
+        self.rotation_helper_frame.place(relx=0.5, rely=1.0, y=-8, anchor=tk.S)
+        self.rotation_helper_frame.lift()
+
+    def rotate(self, angle: float) -> None:
+        """Rotate the stage by the specified angle."""
+        # get stage center
+        stage_center = self.parent_controller.configuration["experiment"][
+            "StageParameters"
+        ]["Mesoscale"].get("rotation_center")
+        rotation_plane = self.parent_controller.configuration["experiment"][
+            "StageParameters"
+        ]["Mesoscale"].get("rotation_plane")
+        if not rotation_plane or not stage_center:
+            message = "Rotation parameters not configured."
+            messagebox.showwarning("Rotation Error", message)
+            return
+
+        axis_x = rotation_plane[0]
+        axis_y = rotation_plane[1]
+        # get current stage position
+        current_position = self.parent_controller.stage_controller.get_position()
+        # calculate rotation value
+        new_position = calculate_rotation(
+            stage_center, (current_position[axis_x], current_position[axis_y]), angle
+        )
+        new_angle = (current_position["theta"] + angle + 360) % 360
+        # send out stage movement command
+        self.parent_controller.execute(
+            "move_stage_and_update_info",
+            {
+                axis_x: new_position[0],
+                axis_y: new_position[1],
+                "theta": new_angle,
+            },
+        )
 
     def popup_menu(self, event: tk.Event) -> None:
         """Right-Click Popup Menu
@@ -2421,6 +2487,7 @@ class MIPViewController(BaseViewController):
 
         self.menu.entryconfig("Move Here", state="disabled")
         self.menu.entryconfig("Mark Position", state="disabled")
+        self.menu.entryconfig("Rotation Helper", state="disabled")
         self.menu.add_separator()
         self.menu.add_checkbutton(
             label="Enable MIP Display",
