@@ -142,6 +142,20 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
         waveform_dict = super().adjust(exposure_times, sweep_times, offset)
 
         waveform_params = {}
+        # to determine if the waveform has to be triangular
+        sensor_mode = self.configuration["experiment"]["CameraParameters"][
+            self.microscope_name
+        ]["sensor_mode"]
+        readout_direction = self.configuration["experiment"]["CameraParameters"][
+            self.microscope_name
+        ]["readout_direction"]
+        if sensor_mode == "Light-Sheet" and (
+            readout_direction == "Bidirectional"
+            or readout_direction == "Rev. Bidirectional"
+        ):
+            waveform_shape = "triangle"
+        else:
+            waveform_shape = "ramp"
         microscope_state = self.configuration["experiment"]["MicroscopeState"]
         waveform_constants = self.configuration["waveform_constants"]
         imaging_mode = microscope_state["microscope_name"]
@@ -209,6 +223,7 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
                     "remote_focus_ramp_falling": remote_focus_ramp_falling,
                     "remote_focus_delay": remote_focus_delay,
                     "percent_smoothing": percent_smoothing,
+                    "shape": waveform_shape,
                 }
 
         self.daq.analog_outputs[self.axis] = {
@@ -217,87 +232,6 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
         }
 
         return waveform_dict
-
-    def triangle(
-        self,
-        sweep_time: float = 0.24,
-        amplitude: float = 1,
-        offset: float = 0,
-    ):
-        """Sends the tiger controller commands to initiate the triangle wave.
-
-        The waveform starts at the offset and immediately rises linearly to 2x amplitude
-        (amplitude here refers to 1/2 peak-to-peak) and immediately falls linearly back
-        to the offset. The waveform is a periodic waveform with no delay periods between
-        cycles.
-
-        Parameters
-        ----------
-        sweep_time : Float
-            Unit - Seconds
-        amplitude : Float
-            Unit - Volts
-        offset : Float
-            Unit - Volts
-        """
-
-        # Converts sweep_time to ms and amplitude and offset to mV
-        period = int(round(sweep_time * 1000))
-        amplitude *= 1000
-        offset *= 1000
-
-        # Triangle waveform
-        self.remote_focus.single_axis_waveform(
-            self.axis, 129, amplitude, offset, period
-        )
-        # Waveform is free running after it is triggered
-        self.remote_focus.single_axis_mode(self.axis, 4)
-
-    def ramp(
-        self,
-        exposure_time: float = 0.2,
-        flyback_time: float = 20,
-        amplitude: float = 1,
-        offset: float = 0.5,
-    ):
-        """Sends the tiger controller commands to initiate the ramp wave.
-
-        The waveform starts at offset and immediately rises linearly to 2x amplitude
-        (amplitude here refers to 1/2 peak-to-peak) and then immediately drops back
-        down to the offset voltage during the fall period.
-
-        There is a delay period after each cycle that comes from the PLC, which is
-        not included in this function.
-
-        Parameters
-        ----------
-        exposure_time : Float
-            Unit - Seconds
-        flyback_time : Float
-            Unit - milliseconds
-        amplitude : Float
-            Unit - Volts
-        offset : Float
-            Unit - Volts
-        """
-
-        # Converts exposure_time to ms and amplitude and offset to mV
-        amplitude *= 1000
-        offset *= 1000
-        exposure_time = int(round(exposure_time * 1000))
-
-        # Ramp waveform that is triggered on TTL inputs
-        self.remote_focus.single_axis_waveform(
-            self.axis,
-            132,
-            amplitude,
-            offset,
-            exposure_time + flyback_time,
-            exposure_time,
-        )
-
-        # The waveform cycles once and waits for another TTL inputs
-        self.remote_focus.single_axis_mode(self.axis, 2)
 
     def move(
         self,
@@ -320,6 +254,7 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
         """
 
         self.adjust(exposure_times, sweep_times, offset)
+        # TODO: update axis setting
 
     def turn_off(self):
         """Stops the remote focus waveform"""
