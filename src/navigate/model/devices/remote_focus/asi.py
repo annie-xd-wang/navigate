@@ -139,19 +139,23 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
             Offset value for the remote focus waveform, by default None
         """
 
-        # to determine if the waveform has to be triangular
-        sensor_mode = self.configuration["experiment"]["CameraParameters"][
-            self.microscope_name
-        ]["sensor_mode"]
-        readout_direction = self.configuration["experiment"]["CameraParameters"][
-            self.microscope_name
-        ]["readout_direction"]
+        waveform_dict = super().adjust(exposure_times, sweep_times, offset)
 
+        waveform_params = {}
         microscope_state = self.configuration["experiment"]["MicroscopeState"]
         waveform_constants = self.configuration["waveform_constants"]
         imaging_mode = microscope_state["microscope_name"]
         zoom = microscope_state["zoom"]
-
+        remote_focus_ramp_falling = (
+            float(waveform_constants["other_constants"]["remote_focus_ramp_falling"])
+            / 1000
+        )
+        remote_focus_delay = (
+            float(waveform_constants["other_constants"]["remote_focus_delay"]) / 1000
+        )
+        percent_smoothing = float(
+            waveform_constants["other_constants"]["percent_smoothing"]
+        )
         for channel_key in microscope_state["channels"].keys():
             # channel includes 'is_selected', 'laser', 'filter', 'camera_exposure'...
             channel = microscope_state["channels"][channel_key]
@@ -166,16 +170,15 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
                 self.sweep_time = sweep_times[channel_key]
 
                 # Remote Focus Parameters
-                # Validation for when user puts a '-' or '.' in spinbox
                 temp = waveform_constants["remote_focus_constants"][imaging_mode][zoom][
                     laser
                 ]["amplitude"]
                 if temp == "-" or temp == ".":
                     waveform_constants["remote_focus_constants"][imaging_mode][zoom][
                         laser
-                    ]["amplitude"] = "1000"
+                    ]["amplitude"] = "0"
 
-                amplitude = float(
+                remote_focus_amplitude = float(
                     waveform_constants["remote_focus_constants"][imaging_mode][zoom][
                         laser
                     ]["amplitude"]
@@ -198,29 +201,22 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
                 if offset is not None:
                     remote_focus_offset += offset
 
-                # Calculate the Waveforms
-                if sensor_mode == "Light-Sheet" and (
-                    readout_direction == "Bidirectional"
-                    or readout_direction == "Rev. Bidirectional"
-                ):
-                    sweep_time = self.sweep_time
-                    amplitude = amplitude
-                    offset = remote_focus_offset
+                waveform_params[channel_key] = {
+                    "amplitude": remote_focus_amplitude,
+                    "offset": remote_focus_offset,
+                    "sweep_time": self.sweep_time,
+                    "exposure_time": exposure_time,
+                    "remote_focus_ramp_falling": remote_focus_ramp_falling,
+                    "remote_focus_delay": remote_focus_delay,
+                    "percent_smoothing": percent_smoothing,
+                }
 
-                    self.triangle(sweep_time, amplitude, offset)
+        self.daq.analog_outputs[self.axis] = {
+            "trigger_source": self.axis,
+            "waveform": waveform_params,
+        }
 
-                else:
-                    remote_focus_ramp_falling = float(
-                        waveform_constants["other_constants"][
-                            "remote_focus_ramp_falling"
-                        ]
-                    )
-                    self.ramp(
-                        exposure_time,
-                        remote_focus_ramp_falling,
-                        amplitude,
-                        remote_focus_offset,
-                    )
+        return waveform_dict
 
     def triangle(
         self,

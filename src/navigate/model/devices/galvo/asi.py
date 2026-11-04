@@ -34,7 +34,6 @@
 import logging
 from typing import Any
 
-
 # Local Imports
 from navigate.model.devices.galvo.base import GalvoBase
 from navigate.config.configuration_schema import SettingSpec
@@ -142,10 +141,9 @@ class ASIGalvo(GalvoBase, SerialDevice):
             Dictionary that includes the galvo waveforms on a per-channel basis.
         """
 
-        # TODO: variables galvo_amplitude, offset, etc., are local in the parent
-        #  method and not assigned as an attribute. As such, much of this code is
-        #  duplicated. We could consider refactoring this to avoid duplication.
+        waveform_dict = super().adjust(exposure_times, sweep_times)
 
+        waveform_params = {}
         microscope_state = self.configuration["experiment"]["MicroscopeState"]
         microscope_name = microscope_state["microscope_name"]
         zoom_value = microscope_state["zoom"]
@@ -155,19 +153,10 @@ class ASIGalvo(GalvoBase, SerialDevice):
         galvo_parameters = self.configuration["waveform_constants"]["galvo_constants"][
             self.galvo_name
         ][microscope_name][zoom_value]
-        self.sample_rate = self.configuration["configuration"]["microscopes"][
-            self.microscope_name
-        ]["daq"]["sample_rate"]
 
         for channel_key in microscope_state["channels"].keys():
-            # channel includes 'is_selected', 'laser', 'filter', 'camera_exposure'...
             channel = microscope_state["channels"][channel_key]
-
-            # Only proceed if it is enabled in the GUI
             if channel["is_selected"] is True:
-
-                # Get the Waveform Parameters - Assumes ETL Delay < Camera Delay.
-                # Should Assert.
                 exposure_time = exposure_times[channel_key]
                 self.sweep_time = sweep_times[channel_key]
 
@@ -176,16 +165,13 @@ class ASIGalvo(GalvoBase, SerialDevice):
                     galvo_amplitude = float(galvo_parameters.get("amplitude", 0))
                     galvo_offset = float(galvo_parameters.get("offset", 0))
                     galvo_rising_ramp = float(galvo_parameters.get("rising_ramp", 50))
-                    if float(galvo_parameters.get("frequency", 10)) == 0:
-                        galvo_period = exposure_time
-                    else:
-                        galvo_period = exposure_time / float(
-                            galvo_parameters.get("frequency", 10)
-                        )
+                    galvo_frequency = (
+                        float(galvo_parameters.get("frequency", 0)) / exposure_time
+                    )
                     factor_name = None
                     if galvo_factor == "channel":
                         factor_name = (
-                            f"Channel {channel_key[channel_key.index('_')+1:]}"
+                            f"Channel {channel_key[channel_key.index('_') + 1 :]}"
                         )
                     elif galvo_factor == "laser":
                         factor_name = channel["laser"]
@@ -204,40 +190,20 @@ class ASIGalvo(GalvoBase, SerialDevice):
                     )
                     return
 
-                # Calculate the Waveforms
-                if self.galvo_waveform == "sawtooth":
-                    period = galvo_period
-                    amplitude = galvo_amplitude
-                    offset = galvo_offset
-                    duty_cycle = galvo_rising_ramp
+                waveform_params[channel_key] = {
+                    "sweep_time": self.sweep_time,
+                    "exposure_time": exposure_time,
+                    "galvo_amplitude": galvo_amplitude,
+                    "galvo_offset": galvo_offset,
+                    "galvo_rising_ramp": galvo_rising_ramp,
+                    "galvo_frequency": galvo_frequency,
+                }
 
-                    # Duty cycle must be either 0, 50, or 100
-                    # If the duty cycle is not 0, 50, or 100, it will round to the nearest value
-                    if duty_cycle not in (0, 50, 100):
-                        duty_cycle = round(duty_cycle / 50) * 50
-                        logger.debug(
-                            f"Invalid duty cycle given. Duty cycle value corrected to {duty_cycle}"
-                        )
-                    self.configuration["waveform_constants"]["galvo_constants"][
-                        self.galvo_name
-                    ][microscope_name][zoom_value]["rising ramp"] = duty_cycle
-                    print(
-                        self.configuration["waveform_constants"]["galvo_constants"][
-                            self.galvo_name
-                        ][microscope_name][zoom_value]["rising ramp"]
-                    )
-                    self.sawtooth(period, amplitude, offset, duty_cycle)
+        self.daq.analog_outputs[self.axis] = {
+            "waveform": waveform_params,
+        }
 
-                elif self.galvo_waveform == "sine":
-                    period = galvo_period
-                    amplitude = galvo_amplitude
-                    offset = galvo_offset
-
-                    self.sine_wave(period, amplitude, offset)
-
-                else:
-                    print("Unknown Galvo waveform specified in configuration file.")
-                    continue
+        return waveform_dict
 
     def sawtooth(
         self,
