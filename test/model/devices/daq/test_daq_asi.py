@@ -34,6 +34,9 @@ import sys
 import types
 from unittest.mock import patch
 
+import numpy as np
+from navigate.model.waveforms import camera_exposure
+
 import pytest
 
 
@@ -75,6 +78,14 @@ class _FakeASIDevice:
         self.raise_on_logic_on = False
         self.raise_on_logic_off = False
         self.axis_addr = {"Z": 1, "F": 2}
+        self.waveform_calls = []
+        self.mode_calls = []
+
+    def single_axis_waveform(self, *args):
+        self.waveform_calls.append(args)
+
+    def single_axis_mode(self, *args):
+        self.mode_calls.append(args)
 
     def setup_control_loop(self, *args):
         self.setup_control_loop_calls.append(args)
@@ -323,3 +334,118 @@ def test_wait_acquisition_done_is_noop(asi_module):
     daq, _ = _build_initialized_asi(asi_module)
 
     assert daq.wait_acquisition_done() is None
+
+
+@pytest.fixture
+def waveform_daq(asi_module):
+    daq, hardware = _build_initialized_asi(asi_module)
+    config = daq.configuration
+    config["experiment"]["MicroscopeState"]["channels"] = {
+        "channel_1": {"is_selected": True, "laser": "488"},
+        "channel_2": {"is_selected": False, "laser": "561"},
+    }
+    config["experiment"]["CameraParameters"] = {
+        "ScopeA": {"sensor_mode": "Normal", "readout_direction": "Top-to-Bottom"}
+    }
+    constants = config["waveform_constants"]
+    constants["remote_focus_constants"] = {
+        "ScopeA": {"1x": {"488": {"amplitude": "1.5", "offset": "-0.25"}}}
+    }
+    constants["other_constants"]["remote_focus_ramp_falling"] = "7.5"
+    constants["galvo_constants"]["Galvo 0"]["ScopeA"]["1x"].update(
+        amplitude="2", offset="0.5"
+    )
+    constants["galvo_constants"]["Galvo 1"]["ScopeA"]["1x"].update(
+        amplitude="3", offset="-0.2"
+    )
+    return daq, hardware
+
+
+def test_calculate_preserves_camera_return_and_prepares_hardware(waveform_daq):
+    daq, hardware = waveform_daq
+    result = daq.calculate_all_waveforms("ScopeA", daq.exposure_times, daq.sweep_times)
+    assert result is daq.waveform_dict
+    np.testing.assert_array_equal(
+        result["channel_1"],
+        camera_exposure(
+            sample_rate=1000, sweep_time=0.05, exposure=0.02, camera_delay=0.005
+        ),
+    )
+    assert daq.waveform_params == {
+        "A": {"channel_1": (2, 132, 1500, -250, 27.5, 20)},
+        "X": {"channel_1": (4, 129, 2000, 500, 10)},
+        "Y": {"channel_1": (4, 131, 3000, -200, 5)},
+    }
+    assert hardware.waveform_calls == []
+    daq.prepare_acquisition("channel_1")
+    assert hardware.waveform_calls == [
+        (axis, *channels["channel_1"][1:])
+        for axis, channels in daq.waveform_params.items()
+    ]
+    assert hardware.mode_calls == [("X", 4), ("Y", 4), ("A", 2)]
+    assert daq.analog_outputs == {"galvo 0": "X", "galvo 1": "Y", "remote_focus": "A"}
+
+
+@pytest.mark.parametrize("direction", ["Bidirectional", "Rev. Bidirectional"])
+def test_calculate_remote_focus_triangle(waveform_daq, direction):
+    daq, _ = waveform_daq
+    daq.configuration["experiment"]["CameraParameters"]["ScopeA"].update(
+        sensor_mode="Light-Sheet", readout_direction=direction
+    )
+    daq.calculate_all_waveforms("ScopeA", daq.exposure_times, daq.sweep_times)
+    assert daq.waveform_params["A"]["channel_1"] == (4, 129, 1500, -250, 50)
+
+
+@pytest.mark.parametrize("factor, key", [("channel", "Channel 1"), ("laser", "488")])
+def test_calculate_galvo_factors_and_zero_frequency(waveform_daq, factor, key):
+    daq, _ = waveform_daq
+    constants = daq.waveform_constants
+    constants["other_constants"]["galvo_factor"] = factor
+    constants["galvo_constants"]["Galvo 0"]["ScopeA"]["1x"].update(
+        frequency=0, rising_ramp=0, **{key: {"amplitude": "1.2", "offset": "0.3"}}
+    )
+    daq.calculate_all_waveforms("ScopeA", daq.exposure_times, daq.sweep_times)
+    assert daq.waveform_params["X"]["channel_1"] == (4, 128, -1200, 300, 20)
+    daq.prepare_acquisition("channel_1")
+
+
+def test_recalculate_refreshes_zoom_constants_and_clears_deselected_channels(
+    waveform_daq,
+):
+    daq, _ = waveform_daq
+    daq.calculate_all_waveforms("ScopeA", daq.exposure_times, daq.sweep_times)
+    constants = daq.waveform_constants
+    constants["remote_focus_constants"]["ScopeA"]["2x"] = {
+        "488": {"amplitude": ".", "offset": "-"}
+    }
+    for galvo in constants["galvo_constants"].values():
+        galvo["ScopeA"]["2x"] = {"frequency": 1, "amplitude": 1}
+    state = daq.configuration["experiment"]["MicroscopeState"]
+    state["zoom"] = "2x"
+    daq.calculate_all_waveforms("ScopeA", daq.exposure_times, daq.sweep_times)
+    assert daq.zoom == "2x"
+    assert daq.waveform_params["A"]["channel_1"] == (2, 132, 0, 0, 27.5, 20)
+    state["channels"]["channel_1"]["is_selected"] = False
+    daq.calculate_all_waveforms("ScopeA", {}, {})
+    assert all(channels == {} for channels in daq.waveform_params.values())
+
+
+def test_calculate_keeps_channel_timing_and_laser_parameters_separate(waveform_daq):
+    daq, _ = waveform_daq
+    state = daq.configuration["experiment"]["MicroscopeState"]
+    state["channels"]["channel_2"]["is_selected"] = True
+    daq.waveform_constants["remote_focus_constants"]["ScopeA"]["1x"]["561"] = {
+        "amplitude": "0.75",
+        "offset": "0.1",
+    }
+    daq.calculate_all_waveforms(
+        "ScopeA",
+        {"channel_1": 0.02, "channel_2": 0.04},
+        {"channel_1": 0.05, "channel_2": 0.08},
+    )
+    assert daq.waveform_params["A"] == {
+        "channel_1": (2, 132, 1500, -250, 27.5, 20),
+        "channel_2": (2, 132, 750, 100, 47.5, 40),
+    }
+    assert daq.waveform_params["X"]["channel_2"] == (4, 129, 2000, 500, 20)
+    assert daq.waveform_params["Y"]["channel_2"] == (4, 131, 3000, -200, 10)

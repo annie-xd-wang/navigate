@@ -3,7 +3,7 @@ def sawtooth(
     amplitude: float = 1,
     offset: float = 0,
     duty_cycle: float = 100,
-) -> None:
+) -> tuple[int, int, float, float, int]:
     """
     Sends the tiger controller commands to initiate the sawtooth wave.
 
@@ -44,7 +44,7 @@ def sawtooth(
 
 def sine_wave(
     period: float = 10.0, amplitude: float = 1.0, offset: float = 0.0
-) -> None:
+) -> tuple[int, int, float, float, int]:
     """Sends the tiger controller commands to initiate the sine wave.
 
     Parameters
@@ -68,11 +68,10 @@ def sine_wave(
 
 
 def triangle(
-    self,
     sweep_time: float = 0.24,
     amplitude: float = 1,
     offset: float = 0,
-):
+) -> tuple[int, int, float, float, int]:
     """Sends the tiger controller commands to initiate the triangle wave.
 
     The waveform starts at the offset and immediately rises linearly to 2x amplitude
@@ -100,12 +99,11 @@ def triangle(
 
 
 def ramp(
-    self,
     exposure_time: float = 0.2,
     flyback_time: float = 20,
     amplitude: float = 1,
     offset: float = 0.5,
-):
+) -> tuple[int, int, float, float, float, int]:
     """Sends the tiger controller commands to initiate the ramp wave.
 
     The waveform starts at offset and immediately rises linearly to 2x amplitude

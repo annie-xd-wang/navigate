@@ -39,6 +39,7 @@ from typing import Any
 from multiprocessing.managers import DictProxy, ListProxy
 
 # Local Imports
+from navigate.model.asi_waveforms import ramp, sawtooth, sine_wave, triangle
 from navigate.model.devices.daq.base import DAQBase
 from navigate.model.devices.device_types import SerialDevice
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
@@ -87,6 +88,9 @@ class ASIDaq(DAQBase, SerialDevice):
 
         #: dict: Mapping of device to tiger axis.
         self.analog_outputs = {}
+
+        #: dict: Hardware waveform parameters by Tiger axis and channel.
+        self.waveform_params: dict[str, dict[str, tuple[Any, ...]]] = {}
 
         #: Any: Device connection.
         self.daq = device_connection
@@ -170,6 +174,101 @@ class ASIDaq(DAQBase, SerialDevice):
             raise Exception("ASI DAQ connection failed.")
         return tiger_controller
 
+    def calculate_all_waveforms(
+        self,
+        microscope_name: str,
+        exposure_times: dict[str, float],
+        sweep_times: dict[str, float],
+    ) -> dict[str, Any]:
+        """Calculate camera waveforms and ASI hardware waveform parameters.
+
+        Parameters
+        ----------
+        microscope_name : str
+            Name of the active microscope.
+        exposure_times : dict[str, float]
+            Exposure times in seconds for each selected channel.
+        sweep_times : dict[str, float]
+            Sweep times in seconds for each selected channel.
+
+        Returns
+        -------
+        dict[str, Any]
+            Camera waveforms, as returned by DAQBase. Hardware command tuples
+            are stored separately in ``waveform_params`` by axis and channel.
+        """
+        waveform_dict = super().calculate_all_waveforms(
+            microscope_name, exposure_times, sweep_times
+        )
+        microscope_state = self.configuration["experiment"]["MicroscopeState"]
+        self.zoom = microscope_state["zoom"]
+        constants = self.waveform_constants
+        other_constants = constants["other_constants"]
+        camera = self.configuration["experiment"]["CameraParameters"][microscope_name]
+        bidirectional = camera["sensor_mode"] == "Light-Sheet" and camera[
+            "readout_direction"
+        ] in ("Bidirectional", "Rev. Bidirectional")
+        remote_focus_axis = self.analog_outputs["remote_focus"]
+        waveform_params = {axis: {} for axis in self.analog_outputs.values()}
+        galvo_factor = other_constants.get("galvo_factor", "none")
+
+        for channel_key, channel in microscope_state["channels"].items():
+            if channel["is_selected"] is not True:
+                continue
+            exposure_time = exposure_times[channel_key]
+            remote_focus = constants["remote_focus_constants"][microscope_name][
+                self.zoom
+            ][channel["laser"]]
+            # Match the input validation used by RemoteFocusBase.adjust().
+            for key in ("amplitude", "offset"):
+                if remote_focus[key] in ("-", "."):
+                    remote_focus[key] = "0"
+            amplitude = float(remote_focus["amplitude"])
+            offset = float(remote_focus["offset"])
+            if bidirectional:
+                params = triangle(sweep_times[channel_key], amplitude, offset)
+            else:
+                params = ramp(
+                    exposure_time,
+                    float(other_constants["remote_focus_ramp_falling"]),
+                    amplitude,
+                    offset,
+                )
+            waveform_params[remote_focus_axis][channel_key] = params
+
+            for i, galvo in enumerate(self.galvos):
+                parameters = constants["galvo_constants"][f"Galvo {i}"][
+                    microscope_name
+                ][self.zoom]
+                amplitude = float(parameters.get("amplitude", 0))
+                offset = float(parameters.get("offset", 0))
+                frequency = float(parameters.get("frequency", 10))
+                period = exposure_time / frequency if frequency else exposure_time
+                factor_name = None
+                if galvo_factor == "channel":
+                    factor_name = f"Channel {channel_key.split('_', 1)[1]}"
+                elif galvo_factor == "laser":
+                    factor_name = channel["laser"]
+                if factor_name and factor_name in parameters:
+                    amplitude = float(parameters[factor_name].get("amplitude", 0))
+                    offset = float(parameters[factor_name].get("offset", 0))
+                if galvo.get("waveform", "sawtooth") == "sawtooth":
+                    params = sawtooth(
+                        period,
+                        amplitude,
+                        offset,
+                        float(parameters.get("rising_ramp", 50)),
+                    )
+                elif galvo["waveform"] == "sine":
+                    params = sine_wave(period, amplitude, offset)
+                else:
+                    continue
+                waveform_params[galvo["hardware"]["axis"]][channel_key] = params
+
+        # Replace the entire mapping so deselected channels cannot retain commands.
+        self.waveform_params = waveform_params
+        return waveform_dict
+
     def prepare_acquisition(self, channel_key: str) -> None:
         """Prepare the acquisition.
 
@@ -193,7 +292,8 @@ class ASIDaq(DAQBase, SerialDevice):
             frequency = self.waveform_constants["galvo_constants"][f"Galvo {i}"][
                 self.microscope_name
             ][self.zoom]["frequency"]
-            period = exposure_time / float(frequency)
+            frequency = float(frequency)
+            period = exposure_time / frequency if frequency else exposure_time
 
             # round period for triangle waveform to even number, as the TG-1000 can only generate triangle waveforms with even-number-of-ms periods
             if self.galvos[i]["waveform"] == "sawtooth":
@@ -302,8 +402,8 @@ class ASIDaq(DAQBase, SerialDevice):
         self.current_channel_key = channel_key
 
         # set waveforms
-        for axis in self.analog_outputs:
-            waveform_params = self.analog_outputs[axis].get(channel_key, None)
+        for axis, channels in self.waveform_params.items():
+            waveform_params = channels.get(channel_key)
             if waveform_params:
                 self.daq.single_axis_waveform(axis, *waveform_params[1:])
                 self.daq.single_axis_mode(axis, waveform_params[0])

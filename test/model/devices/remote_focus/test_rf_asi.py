@@ -124,78 +124,22 @@ def test_connect_raises_when_not_open(asi_module):
     mock_error.assert_called_once_with("ASI stage connection failed.")
 
 
-def test_adjust_routes_to_triangle_for_bidirectional(asi_module):
-    config = _build_config(sensor_mode="Light-Sheet", readout_direction="Bidirectional")
-    constants = config["waveform_constants"]["remote_focus_constants"]["test_mode"]["1x"]["488"]
-    constants["amplitude"] = "."
-    constants["offset"] = "-"
+def test_adjust_returns_base_waveforms_without_programming_hardware(asi_module):
+    device = _new_rf(asi_module)
+    waveforms = {"channel_1": object()}
+    exposure_times = {"channel_1": 0.1}
+    sweep_times = {"channel_1": 0.2}
+    with patch.object(
+        asi_module.RemoteFocusBase, "adjust", return_value=waveforms
+    ) as adjust:
+        result = device.adjust(exposure_times, sweep_times, offset=0.25)
 
-    rf = _new_rf(asi_module, config=config)
-    rf.triangle = MagicMock()
-    rf.ramp = MagicMock()
-
-    exposure_times = {"ch1": 0.05, "ch2": 0.03}
-    sweep_times = {"ch1": 0.3, "ch2": 0.2}
-    rf.adjust(exposure_times, sweep_times, offset=0.2)
-
-    rf.triangle.assert_called_once_with(0.3, 1000.0, 0.2)
-    rf.ramp.assert_not_called()
-    rf_constants = rf.configuration["waveform_constants"]["remote_focus_constants"][
-        "test_mode"
-    ]["1x"]["488"]
-    assert rf_constants["amplitude"] == "1000"
-    assert rf_constants["offset"] == "0"
-    rf.remote_focus.is_open.return_value = False
-
-
-def test_adjust_routes_to_ramp_for_non_lightsheet(asi_module):
-    config = _build_config(sensor_mode="Widefield", readout_direction="Bidirectional")
-    constants = config["waveform_constants"]["remote_focus_constants"]["test_mode"]["1x"]["488"]
-    constants["amplitude"] = "-"
-    constants["offset"] = "."
-
-    rf = _new_rf(asi_module, config=config)
-    rf.triangle = MagicMock()
-    rf.ramp = MagicMock()
-
-    exposure_times = {"ch1": 0.1, "ch2": 0.07}
-    sweep_times = {"ch1": 0.3, "ch2": 0.2}
-    rf.adjust(exposure_times, sweep_times, offset=0.5)
-
-    rf.ramp.assert_called_once_with(0.1, 17.5, 1000.0, 0.5)
-    rf.triangle.assert_not_called()
-    rf_constants = rf.configuration["waveform_constants"]["remote_focus_constants"][
-        "test_mode"
-    ]["1x"]["488"]
-    assert rf_constants["amplitude"] == "1000"
-    assert rf_constants["offset"] == "0"
-    rf.remote_focus.is_open.return_value = False
-
-
-def test_triangle_converts_units_and_sends_commands(asi_module):
-    remote_focus = MagicMock()
-    remote_focus.is_open.return_value = False
-    rf = _new_rf(asi_module, remote_focus=remote_focus)
-
-    rf.triangle(sweep_time=0.234, amplitude=1.5, offset=-0.25)
-
-    remote_focus.single_axis_waveform.assert_called_once_with("B", 129, 1500.0, -250.0, 234)
-    remote_focus.single_axis_mode.assert_called_once_with("B", 4)
-    remote_focus.is_open.return_value = False
-
-
-def test_ramp_converts_units_and_sends_commands(asi_module):
-    remote_focus = MagicMock()
-    remote_focus.is_open.return_value = False
-    rf = _new_rf(asi_module, remote_focus=remote_focus)
-
-    rf.ramp(exposure_time=0.101, flyback_time=20, amplitude=1.25, offset=0.5)
-
-    remote_focus.single_axis_waveform.assert_called_once_with(
-        "B", 132, 1250.0, 500.0, 121, 101
-    )
-    remote_focus.single_axis_mode.assert_called_once_with("B", 2)
-    remote_focus.is_open.return_value = False
+    assert result is waveforms
+    adjust.assert_called_once_with(exposure_times, sweep_times, 0.25)
+    controller = device.remote_focus
+    controller.single_axis_waveform.assert_not_called()
+    controller.single_axis_mode.assert_not_called()
+    controller.is_open.return_value = False
 
 
 def test_move_delegates_to_adjust(asi_module):
@@ -232,3 +176,19 @@ def test_close_is_noop_when_not_open(asi_module):
     remote_focus.single_axis_mode.assert_not_called()
     remote_focus.disconnect_from_serial.assert_not_called()
     remote_focus.is_open.return_value = False
+
+
+@pytest.mark.parametrize(
+    "direction", ["Top-to-Bottom", "Bidirectional", "Rev. Bidirectional"]
+)
+def test_adjust_generates_sampled_remote_focus_waveforms(asi_module, direction):
+    config = _build_config(sensor_mode="Light-Sheet", readout_direction=direction)
+    config["configuration"]["microscopes"]["TestScope"]["daq"]["sample_rate"] = 1000
+    device = _new_rf(asi_module, config=config)
+    result = device.adjust({"ch1": 0.1}, {"ch1": 0.3}, offset=0.25)
+    assert result is device.waveform_dict
+    assert result["ch1"].size > 0
+    assert "ch2" not in result
+    assert result["ch1"].min() >= -5
+    assert result["ch1"].max() <= 5
+    device.remote_focus.single_axis_waveform.assert_not_called()

@@ -190,127 +190,20 @@ def test_connect_failure_raises(asi_module):
     mock_error.assert_called_once_with("ASI stage connection failed.")
 
 
-def test_adjust_sawtooth_rounds_invalid_duty_cycle(asi_module):
-    configuration = build_asi_configuration(
-        waveform="sawtooth",
-        galvo_factor="channel",
-        rising_ramp="63",
-        frequency="2.0",
-        channel_2_selected=False,
-        channel_overrides={"Channel 1": {"amplitude": "2.0", "offset": "0.5"}},
-    )
-    galvo, _ = build_asi_galvo(asi_module, configuration=configuration)
-    exposure_times, sweep_times = default_timing()
+def test_adjust_returns_base_waveforms_without_programming_hardware(asi_module):
+    device = build_asi_galvo(asi_module)[0]
+    waveforms = {"channel_1": object()}
+    exposure_times = {"channel_1": 0.1}
+    sweep_times = {"channel_1": 0.2}
+    with patch.object(asi_module.GalvoBase, "adjust", return_value=waveforms) as adjust:
+        result = device.adjust(exposure_times, sweep_times)
 
-    with patch.object(galvo, "sawtooth") as mock_sawtooth:
-        with patch("builtins.print"):
-            galvo.adjust(exposure_times, sweep_times)
-
-    mock_sawtooth.assert_called_once_with(0.1, 2.0, 0.5, 50)
-    assert (
-        configuration["waveform_constants"]["galvo_constants"]["Galvo 0"]["TestScope"][
-            "1x"
-        ]["rising ramp"]
-        == 50
-    )
-
-    galvo.close = lambda: None
-
-
-def test_adjust_sine_uses_laser_factor_and_zero_frequency_period(asi_module):
-    configuration = build_asi_configuration(
-        waveform="sine",
-        galvo_factor="laser",
-        frequency="0",
-        channel_2_selected=False,
-        laser_overrides={"488": {"amplitude": "3.0", "offset": "-0.2"}},
-    )
-    galvo, _ = build_asi_galvo(asi_module, configuration=configuration)
-    exposure_times, sweep_times = default_timing()
-
-    with patch.object(galvo, "sine_wave") as mock_sine_wave:
-        galvo.adjust(exposure_times, sweep_times)
-
-    mock_sine_wave.assert_called_once_with(0.2, 3.0, -0.2)
-
-    galvo.close = lambda: None
-
-
-def test_adjust_unknown_waveform_prints_message(asi_module):
-    configuration = build_asi_configuration(waveform="banana", channel_2_selected=False)
-    galvo, _ = build_asi_galvo(asi_module, configuration=configuration)
-    exposure_times, sweep_times = default_timing()
-
-    with patch.object(galvo, "sawtooth") as mock_sawtooth:
-        with patch.object(galvo, "sine_wave") as mock_sine_wave:
-            with patch("builtins.print") as mock_print:
-                result = galvo.adjust(exposure_times, sweep_times)
-
-    assert result is None
-    mock_sawtooth.assert_not_called()
-    mock_sine_wave.assert_not_called()
-    mock_print.assert_called_with("Unknown Galvo waveform specified in configuration file.")
-
-    galvo.close = lambda: None
-
-
-def test_adjust_returns_none_on_invalid_waveform_constants(asi_module):
-    configuration = build_asi_configuration(
-        amplitude="not-a-number",
-        channel_2_selected=False,
-    )
-    galvo, _ = build_asi_galvo(asi_module, configuration=configuration)
-    exposure_times, sweep_times = default_timing()
-
-    with patch.object(asi_module.logger, "debug") as mock_debug:
-        result = galvo.adjust(exposure_times, sweep_times)
-
-    assert result is None
-    mock_debug.assert_called_once()
-
-    galvo.close = lambda: None
-
-
-@pytest.mark.parametrize(
-    "duty_cycle, expected_waveform_id, expected_amplitude, expected_period",
-    [
-        (0, 128, -2000.0, 11),
-        (50, 129, 2000.0, 12),
-        (100, 128, 2000.0, 11),
-    ],
-)
-def test_sawtooth_encodes_commands(
-    asi_module,
-    duty_cycle,
-    expected_waveform_id,
-    expected_amplitude,
-    expected_period,
-):
-    galvo, controller = build_asi_galvo(asi_module)
-
-    galvo.sawtooth(period=0.011, amplitude=2.0, offset=0.5, duty_cycle=duty_cycle)
-
-    controller.single_axis_waveform.assert_called_once_with(
-        "B",
-        expected_waveform_id,
-        expected_amplitude,
-        500.0,
-        expected_period,
-    )
-    controller.single_axis_mode.assert_called_once_with("B", 4)
-
-    galvo.close = lambda: None
-
-
-def test_sine_wave_encodes_commands(asi_module):
-    galvo, controller = build_asi_galvo(asi_module)
-
-    galvo.sine_wave(period=0.011, amplitude=1.5, offset=-0.25)
-
-    controller.single_axis_waveform.assert_called_once_with("B", 131, 1500.0, -250.0, 11)
-    controller.single_axis_mode.assert_called_once_with("B", 4)
-
-    galvo.close = lambda: None
+    assert result is waveforms
+    adjust.assert_called_once_with(exposure_times, sweep_times)
+    controller = device.galvo
+    controller.single_axis_waveform.assert_not_called()
+    controller.single_axis_mode.assert_not_called()
+    controller.is_open.return_value = False
 
 
 def test_turn_off_sets_single_axis_mode_zero(asi_module):
@@ -358,3 +251,15 @@ def test_del_calls_close(asi_module):
     mock_close.assert_called_once_with()
 
     galvo.close = lambda: None
+
+
+@pytest.mark.parametrize("waveform", ["sawtooth", "sine"])
+def test_adjust_generates_sampled_galvo_waveforms(asi_module, waveform):
+    config = build_asi_configuration(waveform=waveform, channel_2_selected=False)
+    device, controller = build_asi_galvo(asi_module, configuration=config)
+    result = device.adjust({"channel_1": 0.2}, {"channel_1": 0.2})
+    assert result is device.waveform_dict
+    assert result["channel_1"].size == 20
+    assert "channel_2" not in result
+    controller.single_axis_waveform.assert_not_called()
+    controller.is_open.return_value = False

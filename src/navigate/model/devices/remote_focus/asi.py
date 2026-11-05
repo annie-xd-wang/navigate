@@ -42,7 +42,6 @@ from navigate.model.devices.device_types import SerialDevice
 from navigate.config.configuration_schema import SettingSpec
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
-from navigate.model.asi_waveforms import ramp, triangle
 
 # # Logger Setup
 p = __name__.split(".")[1]
@@ -127,8 +126,8 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
     ) -> dict[str, Any]:
         """Adjust the waveform.
 
-        This method adjusts the waveform parameters.
-        Based on the sensor mode and readout direction, either the triangle or ramp function will be called.
+        Generate the sampled waveform using the same implementation as NI devices.
+        Hardware waveform parameters are calculated by ASIDaq.
 
         Parameters
         ----------
@@ -141,94 +140,6 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
         """
 
         waveform_dict = super().adjust(exposure_times, sweep_times, offset)
-
-        waveform_params = {}
-        # to determine if the waveform has to be triangular
-        sensor_mode = self.configuration["experiment"]["CameraParameters"][
-            self.microscope_name
-        ]["sensor_mode"]
-        readout_direction = self.configuration["experiment"]["CameraParameters"][
-            self.microscope_name
-        ]["readout_direction"]
-        if sensor_mode == "Light-Sheet" and (
-            readout_direction == "Bidirectional"
-            or readout_direction == "Rev. Bidirectional"
-        ):
-            waveform_shape = "triangle"
-        else:
-            waveform_shape = "ramp"
-        microscope_state = self.configuration["experiment"]["MicroscopeState"]
-        waveform_constants = self.configuration["waveform_constants"]
-        imaging_mode = microscope_state["microscope_name"]
-        zoom = microscope_state["zoom"]
-        remote_focus_ramp_falling = (
-            float(waveform_constants["other_constants"]["remote_focus_ramp_falling"])
-            / 1000
-        )
-        remote_focus_delay = (
-            float(waveform_constants["other_constants"]["remote_focus_delay"]) / 1000
-        )
-        percent_smoothing = float(
-            waveform_constants["other_constants"]["percent_smoothing"]
-        )
-        for channel_key in microscope_state["channels"].keys():
-            # channel includes 'is_selected', 'laser', 'filter', 'camera_exposure'...
-            channel = microscope_state["channels"][channel_key]
-
-            # Only proceed if it is enabled in the GUI
-            if channel["is_selected"] is True:
-
-                # Get the Waveform Parameters - Assumes ETL Delay < Camera Delay.
-                # Should Assert.
-                laser = channel["laser"]
-                exposure_time = exposure_times[channel_key]
-                self.sweep_time = sweep_times[channel_key]
-
-                # Remote Focus Parameters
-                temp = waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                    laser
-                ]["amplitude"]
-                if temp == "-" or temp == ".":
-                    waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                        laser
-                    ]["amplitude"] = "0"
-
-                remote_focus_amplitude = float(
-                    waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                        laser
-                    ]["amplitude"]
-                )
-
-                # Validation for when user puts a '-' in spinbox
-                temp = waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                    laser
-                ]["offset"]
-                if temp == "-" or temp == ".":
-                    waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                        laser
-                    ]["offset"] = "0"
-
-                remote_focus_offset = float(
-                    waveform_constants["remote_focus_constants"][imaging_mode][zoom][
-                        laser
-                    ]["offset"]
-                )
-                if offset is not None:
-                    remote_focus_offset += offset
-
-                if waveform_shape == "ramp":
-                    waveform_params[channel_key] = ramp(
-                        exposure_time,
-                        remote_focus_ramp_falling,
-                        remote_focus_amplitude,
-                        remote_focus_offset,
-                    )
-                elif waveform_shape == "triangle":
-                    waveform_params[channel_key] = triangle(
-                        self.sweep_time, remote_focus_amplitude, remote_focus_offset
-                    )
-
-        self.daq.analog_outputs[self.axis] = waveform_params.copy()
 
         return waveform_dict
 

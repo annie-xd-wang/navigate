@@ -40,7 +40,6 @@ from navigate.config.configuration_schema import SettingSpec
 from navigate.model.devices.device_types import SerialDevice
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
-from navigate.model.asi_waveforms import sine_wave, sawtooth
 
 # # Logger Setup
 p = __name__.split(".")[1]
@@ -143,67 +142,6 @@ class ASIGalvo(GalvoBase, SerialDevice):
         """
 
         waveform_dict = super().adjust(exposure_times, sweep_times)
-
-        waveform_params = {}
-        microscope_state = self.configuration["experiment"]["MicroscopeState"]
-        microscope_name = microscope_state["microscope_name"]
-        zoom_value = microscope_state["zoom"]
-        galvo_factor = self.configuration["waveform_constants"]["other_constants"].get(
-            "galvo_factor", "none"
-        )
-        galvo_parameters = self.configuration["waveform_constants"]["galvo_constants"][
-            self.galvo_name
-        ][microscope_name][zoom_value]
-
-        for channel_key in microscope_state["channels"].keys():
-            channel = microscope_state["channels"][channel_key]
-            if channel["is_selected"] is True:
-                exposure_time = exposure_times[channel_key]
-                self.sweep_time = sweep_times[channel_key]
-
-                # galvo Parameters
-                try:
-                    galvo_amplitude = float(galvo_parameters.get("amplitude", 0))
-                    galvo_offset = float(galvo_parameters.get("offset", 0))
-                    galvo_rising_ramp = float(galvo_parameters.get("rising_ramp", 50))
-                    if float(galvo_parameters.get("frequency", 10)) == 0:
-                        galvo_period = exposure_time
-                    else:
-                        galvo_period = exposure_time / float(
-                            galvo_parameters.get("frequency", 10)
-                        )
-                    factor_name = None
-                    if galvo_factor == "channel":
-                        factor_name = (
-                            f"Channel {channel_key[channel_key.index('_') + 1 :]}"
-                        )
-                    elif galvo_factor == "laser":
-                        factor_name = channel["laser"]
-                    if factor_name and factor_name in galvo_parameters.keys():
-                        galvo_amplitude = float(
-                            galvo_parameters[factor_name].get("amplitude", 0)
-                        )
-                        galvo_offset = float(
-                            galvo_parameters[factor_name].get("offset", 0)
-                        )
-
-                except ValueError as e:
-                    logger.debug(
-                        f"{e} waveform constants.yml doesn't have parameter "
-                        f"amplitude/offset/frequency for {self.galvo_name}"
-                    )
-                    return
-
-                if self.galvo_waveform == "sawtooth":
-                    waveform_params[channel_key] = sawtooth(
-                        galvo_period, galvo_amplitude, galvo_offset, galvo_rising_ramp
-                    )
-                elif self.galvo_waveform == "sine":
-                    waveform_params[channel_key] = sine_wave(
-                        galvo_period, galvo_amplitude, galvo_offset
-                    )
-
-        self.daq.analog_outputs[self.axis] = waveform_params.copy()
 
         return waveform_dict
 
