@@ -44,7 +44,6 @@ from navigate.model.devices.device_types import SerialDevice
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
 
-
 # Logger Setup
 p = __name__.split(".")[1]
 logger = logging.getLogger(p)
@@ -301,6 +300,14 @@ class ASIDaq(DAQBase, SerialDevice):
             )
 
         self.current_channel_key = channel_key
+
+        # set waveforms
+        for axis in self.analog_outputs:
+            waveform_params = self.analog_outputs[axis].get(channel_key, None)
+            if waveform_params:
+                self.daq.single_axis_waveform(axis, *waveform_params[1:])
+                self.daq.single_axis_mode(axis, waveform_params[0])
+
         self.is_updating_analog_task = False
         # if self.wait_to_run_lock.locked():
         #     self.wait_to_run_lock.release()

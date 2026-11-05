@@ -40,6 +40,7 @@ from navigate.config.configuration_schema import SettingSpec
 from navigate.model.devices.device_types import SerialDevice
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
+from navigate.model.asi_waveforms import sine_wave, sawtooth
 
 # # Logger Setup
 p = __name__.split(".")[1]
@@ -165,9 +166,12 @@ class ASIGalvo(GalvoBase, SerialDevice):
                     galvo_amplitude = float(galvo_parameters.get("amplitude", 0))
                     galvo_offset = float(galvo_parameters.get("offset", 0))
                     galvo_rising_ramp = float(galvo_parameters.get("rising_ramp", 50))
-                    galvo_frequency = (
-                        float(galvo_parameters.get("frequency", 0)) / exposure_time
-                    )
+                    if float(galvo_parameters.get("frequency", 10)) == 0:
+                        galvo_period = exposure_time
+                    else:
+                        galvo_period = exposure_time / float(
+                            galvo_parameters.get("frequency", 10)
+                        )
                     factor_name = None
                     if galvo_factor == "channel":
                         factor_name = (
@@ -190,19 +194,16 @@ class ASIGalvo(GalvoBase, SerialDevice):
                     )
                     return
 
-                waveform_params[channel_key] = {
-                    "sweep_time": self.sweep_time,
-                    "exposure_time": exposure_time,
-                    "galvo_amplitude": galvo_amplitude,
-                    "galvo_offset": galvo_offset,
-                    "galvo_rising_ramp": galvo_rising_ramp,
-                    "galvo_frequency": galvo_frequency,
-                    "shape": self.galvo_waveform,
-                }
+                if self.galvo_waveform == "sawtooth":
+                    waveform_params[channel_key] = sawtooth(
+                        galvo_period, galvo_amplitude, galvo_offset, galvo_rising_ramp
+                    )
+                elif self.galvo_waveform == "sine":
+                    waveform_params[channel_key] = sine_wave(
+                        galvo_period, galvo_amplitude, galvo_offset
+                    )
 
-        self.daq.analog_outputs[self.axis] = {
-            "waveform": waveform_params,
-        }
+        self.daq.analog_outputs[self.axis] = waveform_params.copy()
 
         return waveform_dict
 

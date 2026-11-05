@@ -42,6 +42,7 @@ from navigate.model.devices.device_types import SerialDevice
 from navigate.config.configuration_schema import SettingSpec
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
+from navigate.model.asi_waveforms import ramp, triangle
 
 # # Logger Setup
 p = __name__.split(".")[1]
@@ -215,21 +216,19 @@ class ASIRemoteFocus(RemoteFocusBase, SerialDevice):
                 if offset is not None:
                     remote_focus_offset += offset
 
-                waveform_params[channel_key] = {
-                    "amplitude": remote_focus_amplitude,
-                    "offset": remote_focus_offset,
-                    "sweep_time": self.sweep_time,
-                    "exposure_time": exposure_time,
-                    "remote_focus_ramp_falling": remote_focus_ramp_falling,
-                    "remote_focus_delay": remote_focus_delay,
-                    "percent_smoothing": percent_smoothing,
-                    "shape": waveform_shape,
-                }
+                if waveform_shape == "ramp":
+                    waveform_params[channel_key] = ramp(
+                        exposure_time,
+                        remote_focus_ramp_falling,
+                        remote_focus_amplitude,
+                        remote_focus_offset,
+                    )
+                elif waveform_shape == "triangle":
+                    waveform_params[channel_key] = triangle(
+                        self.sweep_time, remote_focus_amplitude, remote_focus_offset
+                    )
 
-        self.daq.analog_outputs[self.axis] = {
-            "trigger_source": self.axis,
-            "waveform": waveform_params,
-        }
+        self.daq.analog_outputs[self.axis] = waveform_params.copy()
 
         return waveform_dict
 
