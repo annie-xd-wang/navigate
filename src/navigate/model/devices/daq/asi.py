@@ -148,6 +148,8 @@ class ASIDaq(DAQBase, SerialDevice):
         #: Dict: Mapping of tiger axes to addresses.
         self.axis_addr = self.daq.get_axis_addr()
 
+        self.number_of_channels = 1
+
     @classmethod
     def connect(cls, port, baudrate=115200, timeout=0.25):
         """Build ASIDaq Serial Port connection
@@ -212,9 +214,12 @@ class ASIDaq(DAQBase, SerialDevice):
         waveform_params = {axis: {} for axis in self.analog_outputs.values()}
         galvo_factor = other_constants.get("galvo_factor", "none")
 
+        self.number_of_channels = 0
+
         for channel_key, channel in microscope_state["channels"].items():
             if channel["is_selected"] is not True:
                 continue
+            self.number_of_channels += 1
             exposure_time = exposure_times[channel_key]
             remote_focus = constants["remote_focus_constants"][microscope_name][
                 self.zoom
@@ -379,7 +384,7 @@ class ASIDaq(DAQBase, SerialDevice):
                 self.analog_outputs,
                 num_steps,
             )
-        elif self.single:
+        elif self.single or self.number_of_channels > 1:
             self.daq.setup_control_loop(
                 delays,
                 self.camera_delay,
