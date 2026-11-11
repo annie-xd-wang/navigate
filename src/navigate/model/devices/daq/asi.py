@@ -464,3 +464,6 @@ class ASIDaq(DAQBase, SerialDevice):
     def wait_acquisition_done(self) -> None:
         """Wait for acquisition to be done."""
         super().wait_acquisition_done()
+        self.daq.wait_for_loop()
+
+        self.daq.log_cell_off("1")

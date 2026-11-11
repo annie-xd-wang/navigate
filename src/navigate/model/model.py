@@ -416,9 +416,9 @@ class Model:
         }
         # append plugin acquisition mode
         for mode in self.plugin_acquisition_modes:
-            self.acquisition_modes_feature_setting[
-                mode
-            ] = self.plugin_acquisition_modes[mode].feature_list
+            self.acquisition_modes_feature_setting[mode] = (
+                self.plugin_acquisition_modes[mode].feature_list
+            )
 
         self.load_feature_records()
 
@@ -2365,8 +2365,9 @@ class ASIModel(Model):
             Terminates when live acquisition is stopped.
         """
         self.stop_acquisition = False
-        self.run_acquisition()
+        # self.run_acquisition()
         while not self.stop_acquisition and not self.stop_send_signal:
+            self.run_acquisition()
             if self.injected_flag.value:
                 self.reset_feature_list()
             elif hasattr(self, "signal_container"):
@@ -2473,6 +2474,7 @@ class ASIModel(Model):
         try:
             self.active_microscope.daq.run_acquisition()
             self.logger.info("ASIModel: Acquisition started.")
+            self.active_microscope.daq.wait_acquisition_done()
         except:  # noqa
             self.active_microscope.daq.stop_acquisition()
             if self.active_microscope.current_channel == 0:
