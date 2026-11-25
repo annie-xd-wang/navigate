@@ -4,6 +4,7 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 
@@ -102,6 +103,7 @@ def _new_rf(asi_module, config=None, remote_focus=None):
     if remote_focus is None:
         remote_focus = MagicMock()
         remote_focus.is_open.return_value = False
+    remote_focus.waveforms = {}
     return asi_module.ASIRemoteFocus("TestScope", remote_focus, copy.deepcopy(config))
 
 
@@ -124,78 +126,83 @@ def test_connect_raises_when_not_open(asi_module):
     mock_error.assert_called_once_with("ASI stage connection failed.")
 
 
-def test_adjust_routes_to_triangle_for_bidirectional(asi_module):
-    config = _build_config(sensor_mode="Light-Sheet", readout_direction="Bidirectional")
-    constants = config["waveform_constants"]["remote_focus_constants"]["test_mode"]["1x"]["488"]
-    constants["amplitude"] = "."
-    constants["offset"] = "-"
+@pytest.mark.parametrize(
+    "sensor_mode,readout_direction,expected",
+    [
+        ("Light-Sheet", "Bidirectional", (4, 129, 2000.0, 300.0, 300)),
+        ("Light-Sheet", "Rev. Bidirectional", (4, 129, 2000.0, 300.0, 300)),
+        ("Widefield", "Bidirectional", (2, 132, 2000.0, 300.0, 117.5, 100)),
+        ("Light-Sheet", "Top-to-Bottom", (2, 132, 2000.0, 300.0, 117.5, 100)),
+    ],
+)
+def test_adjust_stores_parameters_and_returns_waveforms(
+    asi_module, sensor_mode, readout_direction, expected
+):
+    rf = _new_rf(asi_module, _build_config(sensor_mode, readout_direction))
+    # Use enough samples to check delay, voltage range, and waveform length.
+    rf.configuration["configuration"]["microscopes"]["TestScope"]["daq"][
+        "sample_rate"
+    ] = 10000
+    rf.remote_focus.waveforms = {"A": {"ch1": (4, 131, 1000, 0, 100)}}
+    other_axis = copy.deepcopy(rf.remote_focus.waveforms["A"])
 
-    rf = _new_rf(asi_module, config=config)
-    rf.triangle = MagicMock()
-    rf.ramp = MagicMock()
+    waveforms = rf.adjust({"ch1": 0.1}, {"ch1": 0.3}, offset=0.2)
 
-    exposure_times = {"ch1": 0.05, "ch2": 0.03}
-    sweep_times = {"ch1": 0.3, "ch2": 0.2}
-    rf.adjust(exposure_times, sweep_times, offset=0.2)
-
-    rf.triangle.assert_called_once_with(0.3, 1000.0, 0.2)
-    rf.ramp.assert_not_called()
-    rf_constants = rf.configuration["waveform_constants"]["remote_focus_constants"][
-        "test_mode"
-    ]["1x"]["488"]
-    assert rf_constants["amplitude"] == "1000"
-    assert rf_constants["offset"] == "0"
-    rf.remote_focus.is_open.return_value = False
-
-
-def test_adjust_routes_to_ramp_for_non_lightsheet(asi_module):
-    config = _build_config(sensor_mode="Widefield", readout_direction="Bidirectional")
-    constants = config["waveform_constants"]["remote_focus_constants"]["test_mode"]["1x"]["488"]
-    constants["amplitude"] = "-"
-    constants["offset"] = "."
-
-    rf = _new_rf(asi_module, config=config)
-    rf.triangle = MagicMock()
-    rf.ramp = MagicMock()
-
-    exposure_times = {"ch1": 0.1, "ch2": 0.07}
-    sweep_times = {"ch1": 0.3, "ch2": 0.2}
-    rf.adjust(exposure_times, sweep_times, offset=0.5)
-
-    rf.ramp.assert_called_once_with(0.1, 17.5, 1000.0, 0.5)
-    rf.triangle.assert_not_called()
-    rf_constants = rf.configuration["waveform_constants"]["remote_focus_constants"][
-        "test_mode"
-    ]["1x"]["488"]
-    assert rf_constants["amplitude"] == "1000"
-    assert rf_constants["offset"] == "0"
-    rf.remote_focus.is_open.return_value = False
+    assert set(waveforms) == {"ch1"}
+    assert waveforms is rf.waveform_dict
+    assert rf.remote_focus.waveforms["B"]["ch1"] == pytest.approx(expected)
+    assert rf.remote_focus.waveforms["A"] == other_axis
+    waveform = waveforms["ch1"]
+    assert isinstance(waveform, np.ndarray)
+    assert waveform.size == (6000 if expected[1] == 129 else 3000)
+    assert waveform.min() == pytest.approx(-1.7)
+    assert waveform.max() == pytest.approx(2.3)
+    rf.remote_focus.single_axis_waveform.assert_not_called()
+    rf.remote_focus.single_axis_mode.assert_not_called()
 
 
-def test_triangle_converts_units_and_sends_commands(asi_module):
-    remote_focus = MagicMock()
-    remote_focus.is_open.return_value = False
-    rf = _new_rf(asi_module, remote_focus=remote_focus)
+@pytest.mark.parametrize("invalid", ["-", "."])
+def test_adjust_validates_incomplete_values(asi_module, invalid):
+    config = _build_config()
+    constants = config["waveform_constants"]["remote_focus_constants"]["test_mode"][
+        "1x"
+    ]["488"]
+    constants.update(amplitude=invalid, offset=invalid)
+    rf = _new_rf(asi_module, config)
 
-    rf.triangle(sweep_time=0.234, amplitude=1.5, offset=-0.25)
+    rf.adjust({"ch1": 0.1}, {"ch1": 0.3}, offset=0.5)
 
-    remote_focus.single_axis_waveform.assert_called_once_with("B", 129, 1500.0, -250.0, 234)
-    remote_focus.single_axis_mode.assert_called_once_with("B", 4)
-    remote_focus.is_open.return_value = False
-
-
-def test_ramp_converts_units_and_sends_commands(asi_module):
-    remote_focus = MagicMock()
-    remote_focus.is_open.return_value = False
-    rf = _new_rf(asi_module, remote_focus=remote_focus)
-
-    rf.ramp(exposure_time=0.101, flyback_time=20, amplitude=1.25, offset=0.5)
-
-    remote_focus.single_axis_waveform.assert_called_once_with(
-        "B", 132, 1250.0, 500.0, 121, 101
+    assert rf.remote_focus.waveforms["B"]["ch1"] == (
+        2,
+        132,
+        1000000.0,
+        500.0,
+        117.5,
+        100,
     )
-    remote_focus.single_axis_mode.assert_called_once_with("B", 2)
-    remote_focus.is_open.return_value = False
+
+
+@pytest.mark.parametrize("readout_direction", ["Bidirectional", "Top-to-Bottom"])
+def test_adjust_keeps_offset_independent_for_each_channel(
+    asi_module, readout_direction
+):
+    rf = _new_rf(asi_module, _build_config("Light-Sheet", readout_direction))
+    channels = rf.configuration["experiment"]["MicroscopeState"]["channels"]
+    channels["ch2"]["is_selected"] = True
+    exposure_times = {"ch1": 0.1, "ch2": 0.05}
+    sweep_times = {"ch1": 0.3, "ch2": 0.2}
+
+    waveforms = rf.adjust(exposure_times, sweep_times, offset=0.2)
+
+    assert set(waveforms) == {"ch1", "ch2"}
+    assert rf.remote_focus.waveforms["B"]["ch1"][3] == pytest.approx(300)
+    assert rf.remote_focus.waveforms["B"]["ch2"][3] == pytest.approx(200)
+
+    channels["ch1"]["is_selected"] = False
+    waveforms = rf.adjust(exposure_times, sweep_times)
+    assert set(waveforms) == {"ch2"}
+    assert set(rf.remote_focus.waveforms["B"]) == {"ch2"}
+    assert rf.remote_focus.waveforms["B"]["ch2"][3] == 0
 
 
 def test_move_delegates_to_adjust(asi_module):

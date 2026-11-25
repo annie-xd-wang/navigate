@@ -34,13 +34,21 @@
 import logging
 from typing import Any
 
-
 # Local Imports
 from navigate.model.devices.galvo.base import GalvoBase
 from navigate.config.configuration_schema import SettingSpec
 from navigate.model.devices.device_types import SerialDevice
 from navigate.model.devices.APIs.asi.asi_tiger_controller import TigerController
 from navigate.tools.decorators import log_initialization
+from navigate.model.asi_waveforms import (
+    sawtooth,
+    sine_wave,
+)
+
+from navigate.model.waveforms import (
+    sawtooth as sawtooth_wave,
+    sine_wave as sine_wave_wave,
+)
 
 # # Logger Setup
 p = __name__.split(".")[1]
@@ -159,6 +167,12 @@ class ASIGalvo(GalvoBase, SerialDevice):
             self.microscope_name
         ]["daq"]["sample_rate"]
 
+        # Keep other devices' axes when sharing a Tiger controller.
+        if not hasattr(self.galvo, "waveform_params"):
+            self.galvo.waveform_params = {}
+        self.galvo.waveform_params[self.axis] = {}
+        self.waveform_dict = {}
+
         for channel_key in microscope_state["channels"].keys():
             # channel includes 'is_selected', 'laser', 'filter', 'camera_exposure'...
             channel = microscope_state["channels"][channel_key]
@@ -176,6 +190,10 @@ class ASIGalvo(GalvoBase, SerialDevice):
                     galvo_amplitude = float(galvo_parameters.get("amplitude", 0))
                     galvo_offset = float(galvo_parameters.get("offset", 0))
                     galvo_rising_ramp = float(galvo_parameters.get("rising_ramp", 50))
+                    galvo_frequency = (
+                        float(galvo_parameters.get("frequency", 0)) / exposure_time
+                    )
+
                     if float(galvo_parameters.get("frequency", 10)) == 0:
                         galvo_period = exposure_time
                     else:
@@ -226,92 +244,41 @@ class ASIGalvo(GalvoBase, SerialDevice):
                             self.galvo_name
                         ][microscope_name][zoom_value]["rising ramp"]
                     )
-                    self.sawtooth(period, amplitude, offset, duty_cycle)
+                    self.galvo.waveform_params[self.axis][channel_key] = sawtooth(
+                        period, amplitude, offset, duty_cycle
+                    )
+                    self.waveform_dict[channel_key] = sawtooth_wave(
+                        sample_rate=self.sample_rate,
+                        sweep_time=sweep_times[channel_key],
+                        frequency=galvo_frequency,
+                        amplitude=galvo_amplitude,
+                        offset=galvo_offset,
+                        duty_cycle=duty_cycle,
+                        phase=self.camera_delay,
+                    )
 
                 elif self.galvo_waveform == "sine":
                     period = galvo_period
                     amplitude = galvo_amplitude
                     offset = galvo_offset
 
-                    self.sine_wave(period, amplitude, offset)
+                    self.galvo.waveform_params[self.axis][channel_key] = sine_wave(
+                        period, amplitude, offset
+                    )
+                    self.waveform_dict[channel_key] = sine_wave_wave(
+                        sample_rate=self.sample_rate,
+                        sweep_time=sweep_times[channel_key],
+                        frequency=galvo_frequency,
+                        amplitude=galvo_amplitude,
+                        offset=galvo_offset,
+                        phase=self.camera_delay,
+                    )
 
                 else:
                     print("Unknown Galvo waveform specified in configuration file.")
                     continue
 
-    def sawtooth(
-        self,
-        period: float = 10,
-        amplitude: float = 1,
-        offset: float = 0,
-        duty_cycle: float = 100,
-    ) -> None:
-        """
-        Sends the tiger controller commands to initiate the sawtooth wave.
-
-        If the duty cycle given is 50, a triangle wave will be initiated.
-
-        Parameters
-        ----------
-        period : Float
-            Unit - milliseconds
-        amplitude : Float
-            Unit - Volts
-        offset : Float
-            Unit - Volts
-        duty_cycle : Float
-            Unit - Percent
-        """
-
-        # Converts period to ms and amplitude and offset to mV
-        period = int(round(period * 1000))
-        amplitude *= 1000
-        offset *= 1000
-
-        if duty_cycle == 0:
-            # Negative amplitude reverses the polarity of the waveform
-            amplitude = amplitude * -1
-            # Sawtooth waveform that is triggered on TTL input
-            self.galvo.single_axis_waveform(self.axis, 128, amplitude, offset, period)
-
-        if duty_cycle == 50:
-            # Adjusts the period for a triangle waveform
-            period = 2 * round(period / 2)
-            # Triangle waveform that is triggered on TTL input
-            self.galvo.single_axis_waveform(self.axis, 129, amplitude, offset, period)
-
-        if duty_cycle == 100:
-            # Sawtooth waveform that is triggered on TTL input
-            self.galvo.single_axis_waveform(self.axis, 128, amplitude, offset, period)
-
-        # Waveform is free running after TTL input
-        self.galvo.single_axis_mode(self.axis, 4)
-
-    def sine_wave(
-        self, period: float = 10.0, amplitude: float = 1.0, offset: float = 0.0
-    ) -> None:
-        """Sends the tiger controller commands to initiate the sine wave.
-
-        Parameters
-        ----------
-        period : Float
-            Unit - milliseconds
-        amplitude : Float
-            Unit - Volts
-        offset : Float
-            Unit - Volts
-
-        """
-
-        # Converts period to ms and amplitude and offset to mV
-        period = int(round(period * 1000))
-        amplitude *= 1000
-        offset *= 1000
-
-        # Sine wave that is triggered on TTL input
-        self.galvo.single_axis_waveform(self.axis, 131, amplitude, offset, period)
-        # Waveform is free running after it is triggered
-        self.galvo.single_axis_mode(self.axis, 4)
+        return self.waveform_dict
 
     def turn_off(self) -> None:
         """Stops the galvo waveform"""
